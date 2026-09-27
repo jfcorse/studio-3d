@@ -4,16 +4,19 @@ Studio de 3,73 × 4,04 m en 3D : mobilier déplaçable, dimensions, couleurs, lu
 
 Le projet tient dans un seul fichier, `studio-3d.html`. On peut l'ouvrir directement dans un navigateur, ou l'utiliser comme application Windows.
 
-## Récupérer l'application Windows
+## Installer l'application Windows
 
-À chaque push, GitHub construit l'application (onglet **Actions** > workflow **Application Windows** > dernière exécution > artefact **Studio-3D-Windows**). Le zip contient :
-
-- `Studio-3D-Setup-x.y.z.exe` : un installateur (installation dans ton compte, sans droits administrateur) ;
-- `Studio-3D-portable-x.y.z.exe` : un seul fichier à lancer, sans installation.
-
-Si tu pousses un tag `v1.0.0` (par exemple), les deux fichiers sont aussi publiés dans une **Release** GitHub.
+Télécharge **`Studio-3D-Setup-….exe`** sur la page [Releases](https://github.com/jfcorse/studio-3d/releases/latest) et lance-le (installation dans ton compte, sans droits administrateur). Il existe aussi une version `Studio-3D-portable-….exe`, sans installation, mais elle ne se met pas à jour toute seule.
 
 Windows SmartScreen peut afficher « Windows a protégé votre ordinateur », parce que l'application n'est pas signée : clique sur **Informations complémentaires**, puis sur **Exécuter quand même**.
+
+## Mises à jour
+
+Rien à faire : chaque changement poussé sur la branche `main` (par exemple par Claude) déclenche la construction d'une nouvelle version sur GitHub (1.0.1, 1.0.2…), publiée dans les Releases en quelques minutes. L'application installée la trouve au démarrage (puis toutes les 4 heures), la télécharge et propose de redémarrer pour l'installer. Tes plans et ton agencement sont conservés.
+
+- Menu **Aide > Rechercher les mises à jour…** pour vérifier tout de suite.
+- Un push sur une autre branche construit seulement des `.exe` de test (onglet **Actions**, artefact **Studio-3D-Windows**), sans les publier.
+- La mise à jour automatique a besoin que le dépôt soit **public**.
 
 ## Modifier le studio depuis l'application
 

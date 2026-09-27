@@ -1,9 +1,11 @@
 name: Application Windows
 
+# - push sur main : nouvelle version 1.0.<n° d'exécution>, publiée dans les Releases GitHub ;
+#   l'application installée la détecte et se met à jour toute seule.
+# - push sur une autre branche : les .exe sont seulement construits (artefact de test).
 on:
   push:
     branches: ['**']
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -22,7 +24,17 @@ jobs:
 
       - run: npm ci
 
-      - name: Construire l'installateur et la version portable
+      - name: Numéro de version
+        run: npm version 1.0.${{ github.run_number }} --no-git-tag-version --allow-same-version
+
+      - name: Construire et publier la version
+        if: github.ref == 'refs/heads/main'
+        run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construire (sans publier)
+        if: github.ref != 'refs/heads/main'
         run: npm run dist
 
       - uses: actions/upload-artifact@v4
@@ -30,10 +42,3 @@ jobs:
           name: Studio-3D-Windows
           path: dist/*.exe
           if-no-files-found: error
-
-      # Sur un tag vN.N.N, les .exe sont aussi publiés dans une Release GitHub
-      - name: Publier la release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.exe

@@ -8,6 +8,7 @@ const { app, BrowserWindow, Menu, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 
 const BUNDLED_DIR = __dirname;
 const HTML = 'studio-3d.html';
@@ -98,6 +99,55 @@ async function restoreOriginal() {
   load();
 }
 
+/* ---------- Mises à jour automatiques (depuis les Releases GitHub) ----------
+   Seule la version installée (Studio-3D-Setup) peut se mettre à jour ; la version portable non. */
+const canUpdate = () => app.isPackaged && !process.env.PORTABLE_EXECUTABLE_DIR;
+let manualCheck = false;
+
+function setupUpdater() {
+  if (!canUpdate()) return;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on('update-not-available', () => {
+    if (manualCheck) dialog.showMessageBox(win, { type: 'info', message: 'Studio 3D est à jour (version ' + app.getVersion() + ').' });
+    manualCheck = false;
+  });
+  autoUpdater.on('error', e => {
+    if (manualCheck) dialog.showMessageBox(win, { type: 'warning', message: 'Impossible de vérifier les mises à jour.', detail: String(e && e.message || e) });
+    manualCheck = false;
+  });
+  autoUpdater.on('update-downloaded', async info => {
+    manualCheck = false;
+    const r = await dialog.showMessageBox(win, {
+      type: 'info',
+      buttons: ['Redémarrer maintenant', 'Plus tard'],
+      defaultId: 0, cancelId: 1,
+      message: 'La version ' + info.version + ' de Studio 3D est prête.',
+      detail: 'Elle sera installée au redémarrage de l’application (sinon, à la prochaine fermeture). Tes plans sont conservés.' +
+        (usingUserCopy() ? '\n\nTu utilises une version modifiée du code : pour voir la nouvelle version, fais ensuite Code > Revenir à la version d’origine.' : ''),
+    });
+    if (r.response === 0) autoUpdater.quitAndInstall();
+  });
+  autoUpdater.checkForUpdates().catch(() => {});
+  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1000);
+}
+
+function checkUpdatesNow() {
+  if (!canUpdate()) {
+    dialog.showMessageBox(win, {
+      type: 'info',
+      message: 'Mise à jour automatique indisponible',
+      detail: 'Seule la version installée (Studio-3D-Setup) se met à jour toute seule. Pour la version portable, télécharge la dernière version sur GitHub.',
+      buttons: ['Ouvrir la page des versions', 'Fermer'], cancelId: 1,
+    }).then(r => { if (r.response === 0) shell.openExternal(RELEASES_URL); });
+    return;
+  }
+  manualCheck = true;
+  autoUpdater.checkForUpdates().catch(() => {});
+}
+
+const RELEASES_URL = 'https://github.com/jfcorse/studio-3d/releases/latest';
+
 function buildMenu() {
   const template = [
     {
@@ -139,6 +189,15 @@ function buildMenu() {
         { label: 'Outils de développement', accelerator: 'F12', role: 'toggleDevTools' },
       ],
     },
+    {
+      label: 'Aide',
+      submenu: [
+        { label: 'Rechercher les mises à jour…', click: checkUpdatesNow },
+        { label: 'Toutes les versions sur GitHub', click: () => shell.openExternal(RELEASES_URL) },
+        { type: 'separator' },
+        { label: 'Version ' + app.getVersion(), enabled: false },
+      ],
+    },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -170,6 +229,6 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
-  app.whenReady().then(() => { buildMenu(); createWindow(); });
+  app.whenReady().then(() => { buildMenu(); createWindow(); setupUpdater(); });
   app.on('window-all-closed', () => app.quit());
 }

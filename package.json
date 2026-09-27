@@ -11,7 +11,8 @@
     "start": "electron .",
     "icon": "node build/make-icon.js",
     "dist": "electron-builder --win --publish never",
-    "dist:zip": "electron-builder --win zip --publish never"
+    "dist:zip": "electron-builder --win zip --publish never",
+    "release": "electron-builder --win --publish always"
   },
   "devDependencies": {
     "electron": "^33.2.0",
@@ -47,6 +48,18 @@
     },
     "portable": {
       "artifactName": "Studio-3D-portable-${version}.${ext}"
-    }
-  }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "jfcorse",
+        "repo": "studio-3d",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
+  "repository": "github:jfcorse/studio-3d"
 }
