@@ -211,9 +211,13 @@ button.ghost{border-color:var(--line);color:var(--muted)}
 </div>
 <div class="error" id="err">La vue 3D n'a pas pu se charger. Vérifie que WebGL est activé dans le navigateur.</div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/objects/Reflector.js"></script>
+<!-- three.js : copie locale (dossier vendor/, utilisée par l'application Windows hors ligne), sinon CDN -->
+<script src="vendor/three.min.js"></script>
+<script>window.THREE||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>')</script>
+<script src="vendor/OrbitControls.js"></script>
+<script>(window.THREE&&THREE.OrbitControls)||document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"><\/script>')</script>
+<script src="vendor/Reflector.js"></script>
+<script>(window.THREE&&THREE.Reflector)||document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/objects/Reflector.js"><\/script>')</script>
 <script>
 (function(){
 if(!window.THREE || !THREE.OrbitControls){document.getElementById('err').style.display='grid';return;}

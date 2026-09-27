@@ -1,0 +1,44 @@
+name: Application Windows
+
+# - push sur main : nouvelle version 1.0.<n° d'exécution>, publiée dans les Releases GitHub ;
+#   l'application installée la détecte et se met à jour toute seule.
+# - push sur une autre branche : les .exe sont seulement construits (artefact de test).
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Numéro de version
+        run: npm version 1.0.${{ github.run_number }} --no-git-tag-version --allow-same-version
+
+      - name: Construire et publier la version
+        if: github.ref == 'refs/heads/main'
+        run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construire (sans publier)
+        if: github.ref != 'refs/heads/main'
+        run: npm run dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Studio-3D-Windows
+          path: dist/*.exe
+          if-no-files-found: error
