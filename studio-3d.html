@@ -580,8 +580,9 @@ frenchWindow(0.48);
 frenchWindow(2.64);
 
 /* ---------- Pièce voisine : la cuisine, derrière la porte-fenêtre de gauche (près de l'entrée) ---------- */
-// Dimensions supposées (à confirmer) : 2,60 m de profondeur derrière le mur de 60 cm, 2,40 m de large.
-const KD=2.60,KZ0=2.20,KZ1=4.60,KX0=-TL,KX1=-TL-KD,KT=0.20;
+// En entrant par la porte-fenêtre : mur de droite 1,65 m (profondeur), mur d'en face 2,00 m (largeur).
+// Le mur du fond de la cuisine est supposé dans le prolongement du mur d'entrée du studio (z = D).
+const KD=1.65,KZ1=D,KZ0=KZ1-2.00,KX0=-TL,KX1=-TL-KD,KT=0.20;
 const kitchenG=new THREE.Group();scene.add(kitchenG);
 const kitchenWalls=[];
 function tomette(base){
@@ -1479,6 +1480,7 @@ function loadInto(s){
   if(s&&s.items){
     items.forEach(it=>{const p=s.items[it.id];if(p){it.obj.position.set(p.x,0,p.z);it.obj.rotation.y=p.r;}});
     items.forEach(it=>{if(it.wallSnap)snapWall(it);});
+    clampItem(kitchenItem);   // la cuisine a pu changer de dimensions depuis l'enregistrement
     if(s.tableOpen===0){tableTarget=0;tableT=0;}
     if(s.sofaBack===1){sofaBackTarget=1;sofaBackT=1;sofaBack.rotation.x=-Math.PI/2;clampItem(sofaItem);}
   }
