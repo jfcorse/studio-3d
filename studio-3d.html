@@ -58,6 +58,30 @@ body{background:var(--bg);color:var(--ink);overflow:hidden;
 .plans .empty{border:none;padding:0;font-size:.85rem;color:var(--muted)}
 h1{font-size:1.25rem;font-weight:600;margin:0 0 2px;letter-spacing:-.01em}
 h2{font-size:.95rem;font-weight:600;margin:14px 0 8px}
+/* accordéons du panneau */
+.acc{border-top:1px solid var(--line);padding:0}
+.acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+  font-size:.95rem;font-weight:600;padding:11px 2px;border-radius:6px}
+.acc>summary::-webkit-details-marker{display:none}
+.acc>summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);
+  transform:rotate(45deg) translateY(-2px);transition:transform .15s;margin-right:4px}
+.acc[open]>summary::after{transform:rotate(-135deg) translateY(-2px)}
+.acc>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.acc[open]{padding-bottom:12px}
+/* carte de l'élément sélectionné, en haut du panneau */
+.selcard{margin:12px 0 10px;padding:10px 12px;border:1px dashed var(--line);border-radius:12px}
+.selcard .selactions{display:none}
+.selcard.active{border:1.5px solid var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.selcard.active .selactions{display:flex}
+.selcard .sel{margin:0}
+.selcard.active .sel{margin:0 0 8px}
+/* lumières avec variateur */
+.lights{display:flex;flex-direction:column;gap:8px}
+.light{display:grid;grid-template-columns:minmax(0,1fr) 96px 42px;align-items:center;gap:8px}
+.light button{text-align:left;font-size:.84rem;padding:6px 11px}
+.light input[type=range]{width:100%;accent-color:var(--accent)}
+.light input[type=range]:disabled{opacity:.4}
+.pct{font-size:.78rem;color:var(--muted);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .dims{margin:0 0 12px;color:var(--muted);font-size:.9rem}
 .actions{display:flex;flex-wrap:wrap;gap:8px}
 button{
@@ -91,7 +115,7 @@ button.ghost{border-color:var(--line);color:var(--muted)}
 <body>
 <div id="scene" aria-label="Vue 3D du studio"></div>
 
-<div class="panel">
+<div class="panel" id="panel">
   <h1>Studio</h1>
   <p class="dims" id="dims">3,73 × 4,04 m, plafond 2,94 m, sol granito</p>
   <p class="note" id="autosave" style="margin:-6px 0 12px" aria-live="polite"></p>
@@ -101,118 +125,148 @@ button.ghost{border-color:var(--line);color:var(--muted)}
     <button id="entryBtn" aria-pressed="false">Étagères à la place de l'entrée</button>
     <button id="viewBtn" class="ghost">Recentrer</button>
   </div>
-  <h2>Lumières et ventilateur</h2>
-  <div class="actions">
-    <button id="spotBtn" aria-pressed="false">Allumer les spots</button>
-    <button id="spotCountBtn" class="ghost">6 spots</button>
-    <button id="bedSpotBtn" aria-pressed="false">Allumer les spots sous le lit</button>
-    <button id="fanLampBtn" aria-pressed="false">Allumer la lampe du ventilateur</button>
-    <button id="fanBtn" aria-pressed="false">Mettre en marche le ventilateur</button>
-  </div>
-  <p class="swlabel" style="margin:10px 0 5px">Lumière du jour</p>
-  <div class="seg">
-    <button data-amb="jour" aria-pressed="true">Jour</button>
-    <button data-amb="soir" aria-pressed="false">Soir</button>
-    <button data-amb="nuit" aria-pressed="false">Nuit</button>
-  </div>
-  <h2>Mes plans</h2>
-  <div class="planrow">
-    <input type="text" id="planName" placeholder="Nom du plan, ex. Version canapé sous le lit" maxlength="60" aria-label="Nom du plan">
-    <button id="planSave">Enregistrer</button>
-  </div>
-  <ul class="plans" id="planList"><li class="empty">Chargement des plans…</li></ul>
-  <div class="actions">
-    <button id="planExport" class="ghost">Exporter en fichier</button>
-    <button id="planImport" class="ghost">Importer un fichier</button>
-    <input type="file" id="planFile" accept=".json,application/json" hidden>
-  </div>
-  <p class="note" id="planNote" style="margin:8px 0 0" hidden></p>
-  <h2>Sol</h2>
-  <div class="seg">
-    <button id="floorGranito" aria-pressed="true">Granito</button>
-    <button id="floorParquet" aria-pressed="false">Parquet</button>
-  </div>
-  <div class="swatches" id="floorSwatches"></div>
-  <p class="swlabel">Sol de la cuisine</p>
-  <div class="swatches" id="kitchenFloorSw"></div>
-  <h2>Couleur des murs</h2>
-  <p class="swlabel">Mur du fond</p><div class="swatches" id="wallBackSw"></div>
-  <p class="swlabel">Mur de gauche (portes-fenêtres)</p><div class="swatches" id="wallLeftSw"></div>
-  <p class="swlabel">Mur de droite</p><div class="swatches" id="wallRightSw"></div>
-  <p class="swlabel">Mur d'entrée</p><div class="swatches" id="wallFrontSw"></div>
-  <h2>Ébrasements des portes-fenêtres</h2>
-  <div class="swatches" id="revealSw"></div>
-  <h2>Afficher</h2>
-  <div class="actions" id="showBar">
-    <button data-show="bed" aria-pressed="true">Lit</button>
-    <button data-show="sofa" aria-pressed="true">Canapé</button>
-    <button data-show="table" aria-pressed="true">Table</button>
-    <button data-show="chairs" aria-pressed="true">Chaises</button>
-    <button data-show="wardrobe" aria-pressed="true">Grande armoire</button>
-    <button data-show="fan" aria-pressed="true">Ventilateur</button>
-    <button data-show="plant" aria-pressed="true">Plante</button>
-    <button data-show="garden" aria-pressed="true">Vue jardin</button>
-    <button data-show="kitchen" aria-pressed="true">Cuisine voisine</button>
-  </div>
-  <h2>Mobilier</h2>
-  <div class="actions" style="margin:0 0 10px">
-    <button id="freezeBtn" aria-pressed="false">Figer les éléments</button>
-    <button id="delBtn" disabled>Supprimer l'élément</button>
-    <button id="restoreBtn" class="ghost" hidden>Remettre les éléments supprimés</button>
-  </div>
-  <p class="sel" id="sel">Clique sur un meuble pour le sélectionner.</p>
-  <div id="bedColors" class="colorset">
-    <div class="actions" style="margin:0 0 10px"><button id="pillowBtn">Oreillers à gauche</button></div>
-    <p class="swlabel">Structure du lit</p><div class="swatches" id="bedFrameSw"></div>
-    <p class="swlabel">Panneaux et étagères</p><div class="swatches" id="bedPanelSw"></div>
-    <p class="swlabel">Linge de lit</p><div class="swatches" id="bedLinenSw"></div>
-  </div>
-  <div id="armColors" class="colorset">
-    <p class="swlabel">Bois de la petite armoire</p><div class="swatches" id="armWoodSw"></div>
-  </div>
-  <div id="wardColors">
-    <p class="swlabel">Teinte de l'armoire</p>
-    <div class="swatches" id="wardSwatches"></div>
-  </div>
-  <div class="sizes" id="wardSizes">
-    <label>Largeur (cm)<input id="wardW" type="number" min="50" max="130" step="5" inputmode="numeric"></label>
-    <label>Profondeur (cm)<input id="wardD" type="number" min="35" max="75" step="5" inputmode="numeric"></label>
-    <label>Hauteur (cm)<input id="wardH" type="number" min="120" max="260" step="5" inputmode="numeric"></label>
-  </div>
-  <div class="sizes" id="sofaSizes">
-    <label>Largeur (cm)<input id="sofaW" type="number" min="100" max="300" step="5" inputmode="numeric"></label>
-    <label>Profondeur (cm)<input id="sofaD" type="number" min="60" max="120" step="5" inputmode="numeric"></label>
-    <label>Hauteur (cm)<input id="sofaH" type="number" min="60" max="110" step="5" inputmode="numeric"></label>
-  </div>
-  <div id="sofaColors" class="colorset">
-    <p class="swlabel">Tissu du canapé</p><div class="swatches" id="sofaFabricSw"></div>
-  </div>
-  <div id="tableColors" class="colorset">
-    <p class="swlabel">Plateau de la table</p><div class="swatches" id="tableWoodSw"></div>
-  </div>
-  <div id="chairColors" class="colorset">
-    <p class="swlabel">Assise et dossier des chaises</p><div class="swatches" id="chairWoodSw"></div>
-    <p class="swlabel">Pieds des chaises</p><div class="swatches" id="chairFrameSw"></div>
-  </div>
-  <div id="fanSizes" class="sizes">
-    <label>Diamètre du ventilateur (cm)<input id="fanD" type="number" min="76" max="132" step="1" inputmode="numeric"></label>
-  </div>
-  <div class="sizes" id="tableSizes">
-    <label>Largeur le long du mur (cm)<input id="tableW" type="number" min="40" max="160" step="5" inputmode="numeric"></label>
-    <label>Profondeur dépliée (cm)<input id="tableD" type="number" min="30" max="90" step="5" inputmode="numeric"></label>
-    <label>Hauteur (cm)<input id="tableH" type="number" min="60" max="110" step="1" inputmode="numeric"></label>
-  </div>
-  <p class="note" id="tableNote" hidden></p>
-  <div class="actions">
-    <button id="rotBtn" disabled>Pivoter de 90°</button>
-    <button id="rot15Btn" disabled>Pivoter de 15°</button>
-    <button id="tableBtn" aria-pressed="true">Replier la table</button>
-    <button id="sofaBackBtn" aria-pressed="false">Baisser le dossier</button>
-    <button id="resetBtn" class="ghost">Replacer les meubles</button>
-    <button id="randBtn">Proposer un agencement</button>
-  </div>
-  <p class="note" id="layoutNote" style="margin:10px 0 0" hidden></p>
-  <p class="hint">Glisse un meuble pour le déplacer, touche R pour le pivoter, touche Suppr pour supprimer un élément du décor (arbre, plante, chaise…). Le lit et la table se déplacent aussi mais restent toujours fixés au mur le plus proche. Glisser dans le vide fait tourner la vue, molette ou pincer pour zoomer. La disposition est gardée dans ce navigateur.</p>
+
+  <!-- Élément sélectionné : ses réglages s'affichent ici, en haut du panneau -->
+  <section class="selcard" id="selCard" aria-live="polite">
+    <p class="sel" id="sel">Clique sur un meuble pour le sélectionner.</p>
+    <div id="bedColors" class="colorset">
+      <div class="actions" style="margin:0 0 10px"><button id="pillowBtn">Oreillers à gauche</button></div>
+      <p class="swlabel">Structure du lit</p><div class="swatches" id="bedFrameSw"></div>
+      <p class="swlabel">Panneaux et étagères</p><div class="swatches" id="bedPanelSw"></div>
+      <p class="swlabel">Linge de lit</p><div class="swatches" id="bedLinenSw"></div>
+    </div>
+    <div id="armColors" class="colorset">
+      <p class="swlabel">Bois de la petite armoire</p><div class="swatches" id="armWoodSw"></div>
+    </div>
+    <div id="wardColors">
+      <p class="swlabel">Teinte de l'armoire</p>
+      <div class="swatches" id="wardSwatches"></div>
+    </div>
+    <div class="sizes" id="wardSizes">
+      <label>Largeur (cm)<input id="wardW" type="number" min="50" max="130" step="5" inputmode="numeric"></label>
+      <label>Profondeur (cm)<input id="wardD" type="number" min="35" max="75" step="5" inputmode="numeric"></label>
+      <label>Hauteur (cm)<input id="wardH" type="number" min="120" max="260" step="5" inputmode="numeric"></label>
+    </div>
+    <div class="sizes" id="sofaSizes">
+      <label>Largeur (cm)<input id="sofaW" type="number" min="100" max="300" step="5" inputmode="numeric"></label>
+      <label>Profondeur (cm)<input id="sofaD" type="number" min="60" max="120" step="5" inputmode="numeric"></label>
+      <label>Hauteur (cm)<input id="sofaH" type="number" min="60" max="110" step="5" inputmode="numeric"></label>
+    </div>
+    <div id="sofaColors" class="colorset">
+      <p class="swlabel">Tissu du canapé</p><div class="swatches" id="sofaFabricSw"></div>
+    </div>
+    <div id="tableColors" class="colorset">
+      <p class="swlabel">Plateau de la table</p><div class="swatches" id="tableWoodSw"></div>
+    </div>
+    <div id="chairColors" class="colorset">
+      <p class="swlabel">Assise et dossier des chaises</p><div class="swatches" id="chairWoodSw"></div>
+      <p class="swlabel">Pieds des chaises</p><div class="swatches" id="chairFrameSw"></div>
+    </div>
+    <div id="fanSizes" class="sizes">
+      <label>Diamètre du ventilateur (cm)<input id="fanD" type="number" min="76" max="132" step="1" inputmode="numeric"></label>
+    </div>
+    <div class="sizes" id="tableSizes">
+      <label>Largeur le long du mur (cm)<input id="tableW" type="number" min="40" max="160" step="5" inputmode="numeric"></label>
+      <label>Profondeur dépliée (cm)<input id="tableD" type="number" min="30" max="90" step="5" inputmode="numeric"></label>
+      <label>Hauteur (cm)<input id="tableH" type="number" min="60" max="110" step="1" inputmode="numeric"></label>
+    </div>
+    <p class="note" id="tableNote" hidden></p>
+    <div class="actions selactions">
+      <button id="rotBtn" disabled>Pivoter de 90°</button>
+      <button id="rot15Btn" disabled>Pivoter de 15°</button>
+      <button id="delBtn" disabled>Supprimer l'élément</button>
+      <button id="deselBtn" class="ghost">Terminer</button>
+    </div>
+  </section>
+
+  <details class="acc" data-acc="lights">
+    <summary>Lumières et ventilateur</summary>
+    <p class="note" style="margin:0 0 8px">Clique sur un luminaire pour l'allumer ou l'éteindre (rempli = allumé), le curseur règle son intensité.</p>
+    <div class="lights">
+      <div class="light"><button id="spotBtn" aria-pressed="false">Spots du plafond</button>
+        <input type="range" data-dim="spots" min="5" max="100" step="5" aria-label="Intensité des spots"><span class="pct" data-pct="spots"></span></div>
+      <div class="actions" style="margin:0 0 4px"><button id="spotCountBtn" class="ghost">6 spots</button></div>
+      <div class="light"><button id="bedSpotBtn" aria-pressed="false">Spots sous le lit</button>
+        <input type="range" data-dim="bed" min="5" max="100" step="5" aria-label="Intensité des spots sous le lit"><span class="pct" data-pct="bed"></span></div>
+      <div class="light"><button id="fanLampBtn" aria-pressed="false">Lampe du ventilateur</button>
+        <input type="range" data-dim="fan" min="5" max="100" step="5" aria-label="Intensité de la lampe du ventilateur"><span class="pct" data-pct="fan"></span></div>
+      <div class="light"><button id="kCeilBtn" aria-pressed="false">Plafonnier cuisine</button>
+        <input type="range" data-dim="kCeil" min="5" max="100" step="5" aria-label="Intensité du plafonnier de la cuisine"><span class="pct" data-pct="kCeil"></span></div>
+      <div class="light"><button id="kUnderBtn" aria-pressed="false">Sous meubles hauts</button>
+        <input type="range" data-dim="kUnder" min="5" max="100" step="5" aria-label="Intensité des lumières sous les meubles hauts de la cuisine"><span class="pct" data-pct="kUnder"></span></div>
+    </div>
+    <div class="actions" style="margin:8px 0 0"><button id="fanBtn" aria-pressed="false">Mettre en marche le ventilateur</button></div>
+    <p class="swlabel" style="margin:12px 0 5px">Lumière du jour</p>
+    <div class="seg">
+      <button data-amb="jour" aria-pressed="true">Jour</button>
+      <button data-amb="soir" aria-pressed="false">Soir</button>
+      <button data-amb="nuit" aria-pressed="false">Nuit</button>
+    </div>
+  </details>
+
+  <details class="acc" data-acc="plans">
+    <summary>Mes plans</summary>
+    <div class="planrow">
+      <input type="text" id="planName" placeholder="Nom du plan, ex. Version canapé sous le lit" maxlength="60" aria-label="Nom du plan">
+      <button id="planSave">Enregistrer</button>
+    </div>
+    <ul class="plans" id="planList"><li class="empty">Chargement des plans…</li></ul>
+    <div class="actions">
+      <button id="planExport" class="ghost">Exporter en fichier</button>
+      <button id="planImport" class="ghost">Importer un fichier</button>
+      <input type="file" id="planFile" accept=".json,application/json" hidden>
+    </div>
+    <p class="note" id="planNote" style="margin:8px 0 0" hidden></p>
+  </details>
+
+  <details class="acc" data-acc="floor">
+    <summary>Sol</summary>
+    <div class="seg">
+      <button id="floorGranito" aria-pressed="true">Granito</button>
+      <button id="floorParquet" aria-pressed="false">Parquet</button>
+    </div>
+    <div class="swatches" id="floorSwatches"></div>
+    <p class="swlabel">Sol de la cuisine</p>
+    <div class="swatches" id="kitchenFloorSw"></div>
+  </details>
+
+  <details class="acc" data-acc="walls">
+    <summary>Couleur des murs</summary>
+    <p class="swlabel">Mur du fond</p><div class="swatches" id="wallBackSw"></div>
+    <p class="swlabel">Mur de gauche (portes-fenêtres)</p><div class="swatches" id="wallLeftSw"></div>
+    <p class="swlabel">Mur de droite</p><div class="swatches" id="wallRightSw"></div>
+    <p class="swlabel">Mur d'entrée</p><div class="swatches" id="wallFrontSw"></div>
+    <p class="swlabel">Ébrasements des portes-fenêtres</p><div class="swatches" id="revealSw"></div>
+  </details>
+
+  <details class="acc" data-acc="show">
+    <summary>Afficher</summary>
+    <div class="actions" id="showBar">
+      <button data-show="bed" aria-pressed="true">Lit</button>
+      <button data-show="sofa" aria-pressed="true">Canapé</button>
+      <button data-show="table" aria-pressed="true">Table</button>
+      <button data-show="chairs" aria-pressed="true">Chaises</button>
+      <button data-show="wardrobe" aria-pressed="true">Grande armoire</button>
+      <button data-show="fan" aria-pressed="true">Ventilateur</button>
+      <button data-show="plant" aria-pressed="true">Plante</button>
+      <button data-show="garden" aria-pressed="true">Vue jardin</button>
+      <button data-show="kitchen" aria-pressed="true">Cuisine voisine</button>
+    </div>
+  </details>
+
+  <details class="acc" data-acc="furniture">
+    <summary>Mobilier</summary>
+    <div class="actions">
+      <button id="freezeBtn" aria-pressed="false">Figer les éléments</button>
+      <button id="restoreBtn" class="ghost" hidden>Remettre les éléments supprimés</button>
+      <button id="tableBtn" aria-pressed="true">Replier la table</button>
+      <button id="sofaBackBtn" aria-pressed="false">Baisser le dossier</button>
+      <button id="resetBtn" class="ghost">Replacer les meubles</button>
+      <button id="randBtn">Proposer un agencement</button>
+    </div>
+    <p class="note" id="layoutNote" style="margin:10px 0 0" hidden></p>
+    <p class="hint">Clique sur un meuble : ses réglages s'affichent en haut du panneau. Glisse-le pour le déplacer, touche R pour le pivoter, touche Suppr pour supprimer un élément du décor (arbre, plante, chaise…). Le lit et la table se déplacent aussi mais restent toujours fixés au mur le plus proche. Glisser dans le vide fait tourner la vue, molette ou pincer pour zoomer. La disposition est gardée sur cet appareil.</p>
+  </details>
 </div>
 <div class="error" id="err">La vue 3D n'a pas pu se charger. Vérifie que WebGL est activé dans le navigateur.</div>
 
@@ -265,6 +319,10 @@ const camera=new THREE.PerspectiveCamera(42,1,0.05,100);
 const ray=new THREE.Raycaster(),ndc=new THREE.Vector2(),hitP=new THREE.Vector3();
 const floorPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
 let drag=null,down=null,selected=null,frozen=false;
+// Variateurs d'intensité (5 à 100 %) de chaque luminaire, et état des luminaires de la cuisine
+const dim={spots:100,bed:100,fan:100,kCeil:100,kUnder:100};
+const dimF=k=>dim[k]/100;
+let kCeilOn=false,kUnderOn=false;
 const removed=new Set();   // identifiants des éléments supprimés (décor, plante, chaises)
 function setRay(e){
   const r=canvas.getBoundingClientRect();
@@ -612,6 +670,16 @@ box(kitchenG,M.slab,KX1-KT,KX0,-0.08,0,KZ0-KT,KZ1+KT,false);
 kitchenWalls.push(wall(-1,0,(g,m)=>box(g,m,KX1-KT,KX1,0,H,KZ0-KT,KZ1+KT)));
 kitchenWalls.push(wall(0,-1,(g,m)=>box(g,m,KX1,KX0,0,H,KZ0-KT,KZ0)));
 kitchenWalls.push(wall(0,1,(g,m)=>box(g,m,KX1,KX0,0,H,KZ1,KZ1+KT)));
+// plafonnier central de la cuisine (disque opalin de 36 cm)
+M.kCeilLamp=new THREE.MeshStandardMaterial({color:0xf7f4ec,roughness:0.3,emissive:0xffe6c4,emissiveIntensity:0});
+let kCeilLight;
+{
+  const kcx=(KX0+KX1)/2,kcz=(KZ0+KZ1)/2;
+  cyl(kitchenG,new THREE.MeshStandardMaterial({color:0xf2f1ec,roughness:0.4}),kcx,H-0.02,H,kcz,0.19);
+  const shade=new THREE.Mesh(new THREE.SphereGeometry(0.18,28,10,0,Math.PI*2,Math.PI/2,Math.PI/2),M.kCeilLamp);
+  shade.scale.y=0.35;shade.position.set(kcx,H-0.02,kcz);kitchenG.add(shade);
+  kCeilLight=new THREE.PointLight(0xffe6c4,0,5,2);kCeilLight.position.set(kcx,H-0.2,kcz);kitchenG.add(kCeilLight);
+}
 
 /* ---------- Vue jardin devant la porte-fenêtre face au lit (z 0,48 → 1,48) ---------- */
 // Petit jardin corse à l'extérieur du mur de façade : terrasse en dalles, pelouse, olivier,
@@ -776,10 +844,10 @@ const bedSpots=[];let bedSpotsOn=false;
   });
 }
 function applyBedSpots(){
-  bedSpots.forEach(l=>l.intensity=bedSpotsOn?1.6:0);
-  M.bedSpotLens.emissiveIntensity=bedSpotsOn?1.2:0;
+  bedSpots.forEach(l=>l.intensity=bedSpotsOn?1.6*dimF('bed'):0);
+  M.bedSpotLens.emissiveIntensity=bedSpotsOn?0.3+0.9*dimF('bed'):0;
   const b=document.getElementById('bedSpotBtn');
-  if(b){b.setAttribute('aria-pressed',String(bedSpotsOn));b.textContent=bedSpotsOn?'Éteindre les spots sous le lit':'Allumer les spots sous le lit';}
+  if(b){b.setAttribute('aria-pressed',String(bedSpotsOn));b.title=bedSpotsOn?'Éteindre les spots sous le lit':'Allumer les spots sous le lit';}
 }
 
 /* ---------- Meubles déplaçables ---------- */
@@ -1087,10 +1155,10 @@ function buildSpots(){
   applySpots();
 }
 function applySpots(){
-  spotLights.forEach(l=>l.intensity=spotsOn?2.2:0);
-  M.spotLens.emissiveIntensity=spotsOn?1.2:0;
+  spotLights.forEach(l=>l.intensity=spotsOn?2.2*dimF('spots'):0);
+  M.spotLens.emissiveIntensity=spotsOn?0.3+0.9*dimF('spots'):0;
   const b=document.getElementById('spotBtn');
-  b.setAttribute('aria-pressed',String(spotsOn));b.textContent=spotsOn?'Éteindre les spots':'Allumer les spots';
+  b.setAttribute('aria-pressed',String(spotsOn));b.title=spotsOn?'Éteindre les spots du plafond':'Allumer les spots du plafond';
   document.getElementById('spotCountBtn').textContent=spotCount+' spots';
 }
 buildSpots();
@@ -1114,7 +1182,7 @@ function buildFan(){
   const lamp=new THREE.Mesh(new THREE.SphereGeometry(0.085,24,12,0,Math.PI*2,Math.PI/2,Math.PI/2),M.fanLamp);
   lamp.position.set(0,BLADE_Y-0.075,0);fan.add(lamp);
   cyl(fan,M.fanBody,0,BLADE_Y-0.08,BLADE_Y-0.06,0,0.09);
-  fanLight=new THREE.PointLight(0xffe0b0,fanLampOn?1.6:0,6,2);fanLight.position.set(0,BLADE_Y-0.2,0);fan.add(fanLight);
+  fanLight=new THREE.PointLight(0xffe0b0,fanLampOn?1.6*dimF('fan'):0,6,2);fanLight.position.set(0,BLADE_Y-0.2,0);fan.add(fanLight);
   for(let i=0;i<5;i++){
     const arm=new THREE.Group();arm.rotation.y=i*Math.PI*2/5;fanRotor.add(arm);
     box(arm,M.metal,0.08,0.20,-0.012,0.004,-0.015,0.015);
@@ -1136,11 +1204,30 @@ function fanInfo(){
 }
 function applyFanLamp(){
   // un ventilateur masqué n'éclaire pas : ses lumières enfants ne sont pas rendues
-  if(fanLight)fanLight.intensity=fanLampOn?1.6:0;
-  M.fanLamp.emissiveIntensity=fanLampOn?1.1:0;
+  if(fanLight)fanLight.intensity=fanLampOn?1.6*dimF('fan'):0;
+  M.fanLamp.emissiveIntensity=fanLampOn?0.3+0.8*dimF('fan'):0;
   const b=document.getElementById('fanLampBtn');
-  if(b){b.setAttribute('aria-pressed',String(fanLampOn));b.textContent=fanLampOn?'Éteindre la lampe du ventilateur':'Allumer la lampe du ventilateur';}
+  if(b){b.setAttribute('aria-pressed',String(fanLampOn));b.title=fanLampOn?'Éteindre la lampe du ventilateur':'Allumer la lampe du ventilateur';}
 }
+function applyKitchenLights(){
+  if(kCeilLight)kCeilLight.intensity=kCeilOn?1.5*dimF('kCeil'):0;
+  M.kCeilLamp.emissiveIntensity=kCeilOn?0.3+0.9*dimF('kCeil'):0;
+  kUnderLights.forEach(l=>l.intensity=kUnderOn?1.3*dimF('kUnder'):0);
+  M.kLed.emissiveIntensity=kUnderOn?0.4+1.0*dimF('kUnder'):0;
+  const b1=document.getElementById('kCeilBtn'),b2=document.getElementById('kUnderBtn');
+  b1.setAttribute('aria-pressed',String(kCeilOn));b1.title=kCeilOn?'Éteindre le plafonnier de la cuisine':'Allumer le plafonnier de la cuisine';
+  b2.setAttribute('aria-pressed',String(kUnderOn));b2.title=kUnderOn?'Éteindre les lumières sous les meubles hauts':'Allumer les lumières sous les meubles hauts';
+}
+// variateurs : chaque curseur règle l'intensité de son luminaire
+const DIM_APPLY={spots:()=>applySpots(),bed:()=>applyBedSpots(),fan:()=>applyFanLamp(),kCeil:()=>applyKitchenLights(),kUnder:()=>applyKitchenLights()};
+function syncDims(){
+  document.querySelectorAll('[data-dim]').forEach(r=>{r.value=dim[r.dataset.dim];});
+  document.querySelectorAll('[data-pct]').forEach(e=>{e.textContent=dim[e.dataset.pct]+' %';});
+}
+document.querySelectorAll('[data-dim]').forEach(r=>{
+  r.addEventListener('input',()=>{const k=r.dataset.dim;dim[k]=Math.min(100,Math.max(5,+r.value||100));syncDims();DIM_APPLY[k]();});
+  r.addEventListener('change',()=>save());
+});
 function applyAmbiance(){
   const A={jour:[1.15,0.6,0.35,0xfff1dc,1.05],soir:[0.45,0.28,0.12,0xffa866,0.95],nuit:[0,0.05,0.02,0xffffff,1.1]}[ambiance];
   sun.intensity=A[0];hemi.intensity=A[1];fill.intensity=A[2];sun.color.set(A[3]);renderer.toneMappingExposure=A[4];
@@ -1198,6 +1285,8 @@ M.kTap=new THREE.MeshStandardMaterial({color:0x141414,roughness:0.3,metalness:0.
 M.kAppliance=new THREE.MeshStandardMaterial({color:0x18181a,roughness:0.32});
 M.kApplianceLine=new THREE.MeshStandardMaterial({color:0x35363a,roughness:0.4,metalness:0.5});
 M.kMicroGlass=new THREE.MeshStandardMaterial({color:0x0a0a0a,roughness:0.15,metalness:0.3});
+M.kLed=new THREE.MeshStandardMaterial({color:0xf4f4f0,roughness:0.4,emissive:0xfff0d8,emissiveIntensity:0});
+const kUnderLights=[];
 let kitchenItem;
 {
   // Bâti le long d'un mur imaginaire en x=0..0.62, longueur en z=0..1.66 ; pivot au centre du bâti.
@@ -1225,6 +1314,12 @@ let kitchenItem;
   box(counter,M.kAppliance,cx0+0.01,cx0+0.33,1.50,1.85,m0+0.01,m1-0.01);
   box(counter,M.kMicroGlass,cx0+0.03,cx0+0.31,1.535,1.815,m0+0.03,m0+0.05,false);
   box(counter,M.kApplianceLine,cx0+0.03,cx0+0.05,1.56,1.79,m0+0.031,m0+0.049,false);
+  // réglette lumineuse sous chaque meuble haut, éclairant le plan de travail
+  [[cz0,u0],[m0,m1]].forEach(([za,zb])=>{
+    box(counter,M.kLed,cx0+0.26,cx0+0.30,1.488,1.50,za+0.04,zb-0.04,false);
+    const L=new THREE.SpotLight(0xfff0d8,0,2.2,1.2,0.8,2);L.position.set(cx0+0.28,1.47,(za+zb)/2);
+    L.target.position.set(cx0+0.36,0.9,(za+zb)/2);counter.add(L,L.target);kUnderLights.push(L);
+  });
 
   // Bloc unique (pas de réfrigérateur) : pivot au centre du plan de travail.
   counter.position.set(0,0,0);
@@ -1345,6 +1440,17 @@ function removeSelected(){
   selEl.innerHTML='<strong>'+name+'</strong> supprimé. « Remettre les éléments supprimés » le fait revenir.';
 }
 delBtn.addEventListener('click',removeSelected);
+document.getElementById('deselBtn').addEventListener('click',()=>select(null));
+// accordéons du panneau : chaque section se replie, et son état est mémorisé sur cet appareil
+{
+  const ACC_KEY='studio3d-accordions';
+  let accState={lights:true};
+  try{accState=Object.assign(accState,JSON.parse(localStorage.getItem(ACC_KEY)||'{}'));}catch(e){}
+  document.querySelectorAll('details.acc').forEach(d=>{
+    d.open=!!accState[d.dataset.acc];
+    d.addEventListener('toggle',()=>{accState[d.dataset.acc]=d.open;try{localStorage.setItem(ACC_KEY,JSON.stringify(accState));}catch(e){}});
+  });
+}
 restoreBtn.addEventListener('click',()=>{removed.clear();applyShow();save();});
 function syncFreeze(){
   freezeBtn.textContent=frozen?'Défiger les éléments':'Figer les éléments';
@@ -1355,8 +1461,11 @@ freezeBtn.addEventListener('click',()=>{frozen=!frozen;syncFreeze();save();});
 window.addEventListener('keydown',e=>{
   if((e.key==='Delete'||e.key==='Backspace')&&selected&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();removeSelected();}
 });
+const selCard=document.getElementById('selCard'),panelEl=document.getElementById('panel');
 function select(it){
-  selected=it;
+  const was=selected;selected=it;
+  selCard.classList.toggle('active',!!it);
+  if(it&&it!==was)panelEl.scrollTo({top:0,behavior:reduceMotion?'auto':'smooth'});
   selBox.visible=!!it;
   if(it){selBox.setFromObject(it.obj);showSel(it);}
   else{selEl.textContent=frozen?'Éléments figés : plus rien n\u2019est sélectionnable. Clique sur « Défiger les éléments » pour les modifier.':'Clique sur un meuble pour le sélectionner.';document.getElementById('sofaSizes').classList.remove('on');document.getElementById('wardSizes').classList.remove('on');document.getElementById('wardColors').classList.remove('on');document.getElementById('bedColors').classList.remove('on');document.getElementById('armColors').classList.remove('on');['tableColors','chairColors','fanSizes','sofaColors'].forEach(i=>document.getElementById(i).classList.remove('on'));document.getElementById('tableSizes').classList.remove('on');document.getElementById('tableNote').hidden=true;}
@@ -1468,12 +1577,15 @@ function applyShow(){
   document.getElementById('fanBtn').disabled=!showState.fan;
   document.getElementById('fanLampBtn').disabled=!showState.fan;
   document.getElementById('bedSpotBtn').disabled=!showState.bed;
+  document.getElementById('kCeilBtn').disabled=!showState.kitchen;
+  document.getElementById('kUnderBtn').disabled=!showState.kitchen;
+  [['bed','bed'],['fan','fan'],['kCeil','kitchen'],['kUnder','kitchen']].forEach(([d,k])=>{const r=document.querySelector('[data-dim="'+d+'"]');if(r)r.disabled=!showState[k];});
 }
 document.querySelectorAll('[data-show]').forEach(b=>b.addEventListener('click',()=>{
   const k=b.dataset.show;showState[k]=!showState[k];applyShow();save();
 }));
 function getState(){
-  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:doorTarget,view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,ward:wardSize,show:showState,removed:[...removed],frozen,items:{}};
+  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:doorTarget,view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,dim:Object.assign({},dim),items:{}};
   items.forEach(it=>o.items[it.id]={x:it.obj.position.x,z:it.obj.position.z,r:it.obj.rotation.y});
   return JSON.parse(JSON.stringify(o));
 }
@@ -1506,6 +1618,9 @@ function loadInto(s){
   if(s&&s.show)Object.assign(showState,s.show);
   if(s&&Array.isArray(s.removed)){removed.clear();s.removed.forEach(id=>removed.add(id));}
   if(s&&typeof s.frozen==='boolean')frozen=s.frozen;
+  if(s&&typeof s.kCeilOn==='boolean')kCeilOn=s.kCeilOn;
+  if(s&&typeof s.kUnderOn==='boolean')kUnderOn=s.kUnderOn;
+  if(s&&s.dim)Object.keys(dim).forEach(k=>{const v=+s.dim[k];if(v>=5&&v<=100)dim[k]=v;});
   if(s&&s.entryCup)entryCup=true;
   if(s&&s.floor&&s.floor.color)Object.assign(floorState,s.floor);
   if(s&&s.wardColor)wardColor=s.wardColor;
@@ -1535,6 +1650,9 @@ document.getElementById('spotCountBtn').addEventListener('click',()=>{spotCount=
 document.getElementById('fanBtn').addEventListener('click',()=>{fanOn=!fanOn;applyFan();save();});
 document.getElementById('fanLampBtn').addEventListener('click',()=>{fanLampOn=!fanLampOn;applyFanLamp();save();});
 document.getElementById('bedSpotBtn').addEventListener('click',()=>{bedSpotsOn=!bedSpotsOn;applyBedSpots();save();});
+document.getElementById('kCeilBtn').addEventListener('click',()=>{kCeilOn=!kCeilOn;applyKitchenLights();save();});
+document.getElementById('kUnderBtn').addEventListener('click',()=>{kUnderOn=!kUnderOn;applyKitchenLights();save();});
+applyKitchenLights();syncDims();
 applyBedSpots();
 document.querySelectorAll('[data-amb]').forEach(b=>b.addEventListener('click',()=>{ambiance=b.dataset.amb;applyAmbiance();save();}));
 applyFanLamp();applyAmbiance();
@@ -1591,7 +1709,7 @@ function applyPlan(state){
   buildWardrobe();wardInfo();buildSofa();sofaInfo();buildTable();poseTable(tableT);tableInfo();buildFan();fanItem.w=fanItem.d=fanSize.d;
   if(s.sofaBack===1)sofaBack.rotation.x=-Math.PI/2;
   applyShow();applyFloor();applyWardColor();Object.keys(colors).forEach(applyColor);applyPillows();buildSpots();applyFan();applyFanLamp();applyBedSpots();applyAmbiance();applyEntry();
-  syncFreeze();
+  syncFreeze();applyKitchenLights();syncDims();
   syncBedDoorBtns();syncTableBtn();syncSofaInputs();syncTableInputs();syncWardInputs();syncSofaBackBtn();fanIn.value=Math.round(fanSize.d*100);
   items.forEach(it=>clampItem(it));
   select(null);save();
