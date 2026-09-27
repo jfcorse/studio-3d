@@ -250,6 +250,7 @@ button.ghost{border-color:var(--line);color:var(--muted)}
       <button data-show="fan" aria-pressed="true">Ventilateur</button>
       <button data-show="plant" aria-pressed="true">Plante</button>
       <button data-show="garden" aria-pressed="true">Vue jardin</button>
+      <button data-show="mountains" aria-pressed="true">Montagnes</button>
       <button data-show="kitchen" aria-pressed="true">Cuisine voisine</button>
     </div>
   </details>
@@ -687,6 +688,7 @@ let kCeilLight;
 const gardenG=new THREE.Group();scene.add(gardenG);
 // Éléments du décor : sélectionnables et supprimables, mais ni déplaçables ni pivotables.
 const decor=[];
+let gardenBack=null;   // toile de fond : ciel, montagnes et maquis (affichable à part)
 function addDecor(id,name,obj,info){
   const d={id,name,obj,info:info||'élément du jardin',deco:true,fixed:true,noRotate:true};
   obj.userData.item=d;gardenG.add(obj);decor.push(d);return d;
@@ -746,7 +748,7 @@ function addDecor(id,name,obj,info){
   ridge(250,26,'#a9b8c8',3);ridge(300,22,'#8ea3b5',5);ridge(360,16,'#6f8a5c',9);ridge(410,10,'#5d7a4c',13);
   const bt=new THREE.CanvasTexture(bc);bt.encoding=THREE.sRGBEncoding;
   const back=new THREE.Mesh(new THREE.PlaneGeometry(Z1-Z0+1.2,3.4),new THREE.MeshLambertMaterial({map:bt}));
-  back.rotation.y=Math.PI/2;back.position.set(X1-0.05,1.2,(Z0+Z1)/2);gardenG.add(back);
+  back.rotation.y=Math.PI/2;back.position.set(X1-0.05,1.2,(Z0+Z1)/2);gardenG.add(back);gardenBack=back;
 }
 const mainDoorP=hinge(leaf({w:0.79,h:2.02}),doorX1-0.005,0.01,D+0.03,Math.PI,Math.PI/2);
 
@@ -1441,14 +1443,20 @@ function removeSelected(){
 }
 delBtn.addEventListener('click',removeSelected);
 document.getElementById('deselBtn').addEventListener('click',()=>select(null));
-// accordéons du panneau : chaque section se replie, et son état est mémorisé sur cet appareil
+// accordéons du panneau : une seule section ouverte à la fois (la carte de sélection, en haut, reste toujours visible) ;
+// la section ouverte est mémorisée sur cet appareil
 {
-  const ACC_KEY='studio3d-accordions';
-  let accState={lights:true};
-  try{accState=Object.assign(accState,JSON.parse(localStorage.getItem(ACC_KEY)||'{}'));}catch(e){}
-  document.querySelectorAll('details.acc').forEach(d=>{
-    d.open=!!accState[d.dataset.acc];
-    d.addEventListener('toggle',()=>{accState[d.dataset.acc]=d.open;try{localStorage.setItem(ACC_KEY,JSON.stringify(accState));}catch(e){}});
+  const ACC_KEY='studio3d-accordion-open';
+  const accs=[...document.querySelectorAll('details.acc')];
+  let openAcc='lights';
+  try{const v=localStorage.getItem(ACC_KEY);if(v!==null)openAcc=v;}catch(e){}
+  accs.forEach(d=>{
+    d.open=d.dataset.acc===openAcc;
+    d.addEventListener('toggle',()=>{
+      if(d.open)accs.forEach(o=>{if(o!==d)o.open=false;});
+      const cur=accs.find(o=>o.open);
+      try{localStorage.setItem(ACC_KEY,cur?cur.dataset.acc:'');}catch(e){}
+    });
   });
 }
 restoreBtn.addEventListener('click',()=>{removed.clear();applyShow();save();});
@@ -1548,14 +1556,14 @@ function applyDefaults(){
   items.forEach(it=>{it.obj.position.set(it.def.x,0,it.def.z);it.obj.rotation.y=it.def.r;});
   items.forEach(it=>{if(it.wallSnap)snapWall(it);});
 }
-const showState={bed:true,sofa:true,table:true,chairs:true,wardrobe:true,fan:true,plant:true,garden:true,kitchen:true};
+const showState={bed:true,sofa:true,table:true,chairs:true,wardrobe:true,fan:true,plant:true,garden:true,mountains:true,kitchen:true};
 function groupItems(k){
   if(k==='bed')return[bedItem];
   if(k==='sofa')return[sofaItem];
   if(k==='table')return[tableItem];
   if(k==='wardrobe')return[wardItem];
   if(k==='fan')return[fanItem];
-  if(k==='garden')return[];
+  if(k==='garden'||k==='mountains')return[];
   if(k==='kitchen')return[kitchenItem];
   if(k==='plant')return[plantItem];
   return items.filter(i=>i.id.startsWith('chair'));
@@ -1564,6 +1572,7 @@ function applyShow(){
   for(const k in showState){
     groupItems(k).forEach(it=>{it.obj.visible=showState[k]&&!removed.has(it.id);if(!it.obj.visible&&selected===it)select(null);});
     if(k==='garden')gardenG.visible=showState[k];
+    if(k==='mountains'&&gardenBack)gardenBack.visible=showState[k];
     if(k==='kitchen'){kitchenG.visible=showState[k];kitchenWalls.forEach(g=>g.visible=showState[k]);}
     const b=document.querySelector('[data-show="'+k+'"]');
     b.setAttribute('aria-pressed',String(showState[k]));
@@ -1590,7 +1599,7 @@ function getState(){
   return JSON.parse(JSON.stringify(o));
 }
 // Sauvegarde automatique : chaque changement (déplacement, taille, couleur, état, vue) est gardé aussitôt.
-function save(){
+let save=function(){
   try{
     localStorage.setItem(KEY,JSON.stringify(getState()));
     const el=document.getElementById('autosave');
@@ -1721,7 +1730,7 @@ let plansCol=null,plansCache=[];
 function localPlans(){try{return JSON.parse(localStorage.getItem(LOCAL_PLANS)||'[]');}catch(e){return[];}}
 function setLocalPlans(l){try{localStorage.setItem(LOCAL_PLANS,JSON.stringify(l));}catch(e){}}
 function slug(n){return(n.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'plan').slice(0,60);}
-function renderPlans(list){
+let renderPlans=function(list){
   plansCache=list;planList.innerHTML='';
   if(!list.length){const li=document.createElement('li');li.className='empty';li.textContent='Aucun plan enregistré pour l\u2019instant.';planList.appendChild(li);return;}
   list.forEach(p=>{
@@ -1798,6 +1807,57 @@ planFile.addEventListener('change',async()=>{
     note('Plan importé depuis '+f.name+'. Pense à l\u2019enregistrer pour le garder dans la liste.');
   }catch(e){note('Ce fichier n\u2019est pas un plan du studio. Choisis un fichier exporté depuis cette page.');}
 });
+
+/* ---------- Application Windows : les plans passent par le menu Fichier ----------
+   Dans l'application, « Mes plans » quitte le panneau : Fichier > Nouveau, Ouvrir, Ouvrir récent,
+   Enregistrer (Ctrl+S) et Enregistrer sous enregistrent le plan dans un fichier .json.
+   Les plans gardés dans l'application restent accessibles dans Fichier > Plans enregistrés dans l'application. */
+const desktop=window.studioApp||null;
+if(desktop){
+  const plansAcc=document.querySelector('details.acc[data-acc="plans"]');
+  if(plansAcc){plansAcc.open=false;plansAcc.hidden=true;}
+  let curPath=null,curName='',dirty=false;
+  const baseName=p=>(p||'').split(/[\\/]/).pop().replace(/\.json$/i,'');
+  const syncTitle=()=>desktop.setDocument({name:curName,path:curPath,dirty});
+  const planData=name=>JSON.stringify({app:'studio-3d',name,savedAt:Date.now(),state:getState()},null,2);
+  const showMsg=t=>{const el=document.getElementById('autosave');if(el)el.textContent=t;};
+  async function saveAs(){
+    const name=curName||planName.value.trim()||'Plan du studio';
+    const r=await desktop.saveFile({path:null,suggested:slug(name)+'.json',data:planData(name)});
+    if(!r||!r.path)return;
+    curPath=r.path;curName=baseName(r.path);dirty=false;
+    // le nom du fichier devient le nom du plan, et le fichier est réécrit avec ce nom
+    await desktop.saveFile({path:curPath,data:planData(curName)});
+    syncTitle();showMsg('Plan enregistré dans '+curPath);
+  }
+  async function saveCur(){
+    if(!curPath)return saveAs();
+    const r=await desktop.saveFile({path:curPath,data:planData(curName)});
+    if(r&&r.path){dirty=false;syncTitle();showMsg('Plan « '+curName+' » enregistré.');}
+  }
+  function loadPlanJson(text,path){
+    const j=JSON.parse(text);const st=j&&j.state?j.state:j;
+    if(!st||!st.items)throw new Error('format');
+    applyPlan(st);
+    curPath=path||null;curName=path?baseName(path):(j.name||'');dirty=false;syncTitle();
+    showMsg('Plan « '+curName+' » ouvert.');
+  }
+  desktop.onMenu(async(cmd,arg)=>{
+    try{
+      if(cmd==='save')await saveCur();
+      else if(cmd==='saveAs')await saveAs();
+      else if(cmd==='new'){applyPlan(DEFAULT_STATE);curPath=null;curName='';dirty=false;syncTitle();showMsg('Nouveau plan (agencement d\u2019origine).');}
+      else if(cmd==='opened')loadPlanJson(arg.data,arg.path);
+      else if(cmd==='openPlan'){const p=plansCache.find(x=>x.id===arg);if(p&&p.state){applyPlan(p.state);curPath=null;curName=p.name||'';dirty=true;syncTitle();showMsg('Plan « '+curName+' » ouvert. Fichier > Enregistrer sous pour le garder dans un fichier.');}}
+    }catch(e){desktop.alert('Ce fichier n\u2019est pas un plan du studio.');}
+  });
+  // chaque modification marque le plan comme non enregistré (l'agencement reste sauvegardé automatiquement)
+  const _save=save;save=function(){_save();if(!dirty){dirty=true;syncTitle();}};
+  // la liste des plans gardés dans l'application alimente le sous-menu du menu Fichier
+  const _render=renderPlans;renderPlans=function(list){_render(list);desktop.setPlans(list.map(p=>({id:p.id,name:p.name||'Sans nom'})));};
+  renderPlans(plansCache);
+  syncTitle();
+}
 
 sofaBackBtn.addEventListener('click',()=>{sofaBackTarget=sofaBackTarget>0.5?0:1;syncSofaBackBtn();save();});
 tableBtn.addEventListener('click',()=>{tableTarget=tableTarget>0.5?0:1;syncTableBtn();save();});
@@ -1943,7 +2003,7 @@ document.getElementById('resetBtn').addEventListener('click',()=>{
   Object.assign(sofaSize,{w:1.60,d:0.88,h:0.80});buildSofa();sofaInfo();syncSofaInputs();
   Object.assign(wardSize,{w:0.90,d:0.55,h:2.10});buildWardrobe();wardInfo();syncWardInputs();
   Object.assign(tableSize,{w:0.80,d:0.70,h:0.75});buildTable();tableInfo();syncTableInputs();
-  Object.assign(showState,{bed:true,sofa:true,table:true,chairs:true,wardrobe:true,fan:true,plant:true,garden:true,kitchen:true});applyShow();
+  Object.assign(showState,{bed:true,sofa:true,table:true,chairs:true,wardrobe:true,fan:true,plant:true,garden:true,mountains:true,kitchen:true});applyShow();
   sofaBackTarget=0;sofaBackT=0;syncSofaBackBtn();sofaBack.rotation.x=0;
   applyDefaults();tableTarget=1;syncTableBtn();select(null);save();
 });

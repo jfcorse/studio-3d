@@ -27,6 +27,7 @@
     },
     "files": [
       "main.js",
+      "preload.js",
       "studio-3d.html",
       "vendor/**/*",
       "build/icon.png",

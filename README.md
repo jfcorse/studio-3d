@@ -20,7 +20,16 @@ Rien à faire : chaque changement poussé sur la branche `main` (par exemple par
 
 ## Modifier le studio depuis l'application
 
-Tout se fait dans le panneau : déplacer les meubles à la souris, les faire pivoter (touche R), changer les tailles et les couleurs, enregistrer des plans et les exporter en fichier `.json`. Tout est enregistré automatiquement sur l'ordinateur.
+Tout se fait dans le panneau : déplacer les meubles à la souris (les réglages de l'objet sélectionné s'affichent en haut), les faire pivoter (touche R), changer les tailles, les couleurs et les lumières. L'agencement est enregistré automatiquement sur l'ordinateur.
+
+Les plans se gèrent dans le menu **Fichier** :
+
+- **Nouveau plan** (Ctrl+N) : repart de l'agencement d'origine ;
+- **Ouvrir un plan…** (Ctrl+O) et **Ouvrir récent** ;
+- **Enregistrer** (Ctrl+S) et **Enregistrer sous…** (Ctrl+Maj+S) : fichiers `.json`, par défaut dans `Documents\Studio 3D\Plans` ;
+- **Plans enregistrés dans l'application** : les plans gardés avec l'ancienne liste « Mes plans ».
+
+Dans un navigateur, la section « Mes plans » du panneau reste disponible.
 
 ## Modifier le code depuis l'application
 

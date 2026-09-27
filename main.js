@@ -4,7 +4,7 @@
 //  - de la copie modifiable dans « Documents\Studio 3D » si elle existe (menu Code > Modifier le code),
 //  - sinon du fichier livré avec l'application.
 // Quand la copie modifiable change sur le disque, la fenêtre se recharge toute seule.
-const { app, BrowserWindow, Menu, shell, dialog } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -18,6 +18,84 @@ const USER_HTML = path.join(USER_DIR, HTML);
 let win = null;
 let watcher = null;
 let reloadTimer = null;
+
+/* ---------- Plans (menu Fichier) ---------- */
+// Les plans s'enregistrent en fichiers .json, par défaut dans « Documents\Studio 3D\Plans ».
+const PLANS_DIR = path.join(USER_DIR, 'Plans');
+const RECENT_FILE = path.join(app.getPath('userData'), 'plans-recents.json');
+let doc = { name: '', path: null, dirty: false };   // plan ouvert, pour le titre de la fenêtre
+let appPlans = [];                                   // plans gardés dans l'application (ancienne liste « Mes plans »)
+let recent = [];
+try { recent = JSON.parse(fs.readFileSync(RECENT_FILE, 'utf8')).filter(f => typeof f === 'string'); } catch (e) { recent = []; }
+
+function addRecent(file) {
+  recent = [file, ...recent.filter(f => f !== file)].slice(0, 8);
+  try { fs.writeFileSync(RECENT_FILE, JSON.stringify(recent)); } catch (e) { /* liste non gardée */ }
+  buildMenu();
+}
+
+function updateTitle() {
+  if (!win) return;
+  const name = doc.name ? doc.name + (doc.dirty ? ' •' : '') + ' — ' : '';
+  win.setTitle(name + 'Studio 3D' + (usingUserCopy() ? ' (version modifiée)' : ''));
+}
+
+const sendMenu = (cmd, arg) => { if (win) win.webContents.send('menu', cmd, arg); };
+
+function openPlanFile(file) {
+  try {
+    const data = fs.readFileSync(file, 'utf8');
+    sendMenu('opened', { path: file, data });
+    addRecent(file);
+  } catch (e) {
+    recent = recent.filter(f => f !== file); buildMenu();
+    dialog.showErrorBox('Studio 3D', 'Impossible d’ouvrir ce plan :\n' + e.message);
+  }
+}
+
+async function openPlan() {
+  fs.mkdirSync(PLANS_DIR, { recursive: true });
+  const r = await dialog.showOpenDialog(win, {
+    title: 'Ouvrir un plan', defaultPath: doc.path ? path.dirname(doc.path) : PLANS_DIR,
+    filters: [{ name: 'Plans du studio', extensions: ['json'] }], properties: ['openFile'],
+  });
+  if (!r.canceled && r.filePaths[0]) openPlanFile(r.filePaths[0]);
+}
+
+async function newPlan() {
+  if (doc.dirty) {
+    const r = await dialog.showMessageBox(win, {
+      type: 'question', buttons: ['Nouveau plan', 'Annuler'], defaultId: 0, cancelId: 1,
+      message: 'Repartir de l’agencement d’origine ?',
+      detail: 'Les modifications du plan « ' + (doc.name || 'sans nom') + ' » qui n’ont pas été enregistrées dans un fichier seront perdues.',
+    });
+    if (r.response !== 0) return;
+  }
+  sendMenu('new');
+}
+
+ipcMain.handle('plan:save', async (_, { path: file, suggested, data }) => {
+  if (!file) {
+    fs.mkdirSync(PLANS_DIR, { recursive: true });
+    const r = await dialog.showSaveDialog(win, {
+      title: 'Enregistrer le plan', defaultPath: path.join(doc.path ? path.dirname(doc.path) : PLANS_DIR, suggested || 'plan-du-studio.json'),
+      filters: [{ name: 'Plans du studio', extensions: ['json'] }],
+    });
+    if (r.canceled || !r.filePath) return null;
+    file = r.filePath;
+  }
+  try {
+    fs.writeFileSync(file, data);
+    addRecent(file);
+    return { path: file };
+  } catch (e) {
+    dialog.showErrorBox('Studio 3D', 'Impossible d’enregistrer le plan :\n' + e.message);
+    return null;
+  }
+});
+ipcMain.on('plan:document', (_, d) => { doc = { name: String(d.name || ''), path: d.path || null, dirty: !!d.dirty }; updateTitle(); });
+ipcMain.on('plan:list', (_, list) => { appPlans = Array.isArray(list) ? list.slice(0, 50) : []; buildMenu(); });
+ipcMain.on('app:alert', (_, msg) => { if (win) dialog.showMessageBox(win, { type: 'warning', message: String(msg) }); });
 
 const usingUserCopy = () => fs.existsSync(USER_HTML);
 const currentHtml = () => (usingUserCopy() ? USER_HTML : path.join(BUNDLED_DIR, HTML));
@@ -41,7 +119,7 @@ function ensureUserCopy() {
 function load() {
   if (!win) return;
   win.loadFile(currentHtml());
-  win.setTitle(usingUserCopy() ? 'Studio 3D (version modifiée)' : 'Studio 3D');
+  updateTitle();
   watch();
 }
 
@@ -153,6 +231,25 @@ function buildMenu() {
     {
       label: 'Fichier',
       submenu: [
+        { label: 'Nouveau plan', accelerator: 'CmdOrCtrl+N', click: newPlan },
+        { label: 'Ouvrir un plan…', accelerator: 'CmdOrCtrl+O', click: openPlan },
+        {
+          label: 'Ouvrir récent',
+          submenu: recent.length
+            ? recent.map(f => ({ label: path.basename(f, '.json'), sublabel: f, click: () => openPlanFile(f) }))
+            : [{ label: 'Aucun plan récent', enabled: false }],
+        },
+        {
+          label: 'Plans enregistrés dans l’application',
+          submenu: appPlans.length
+            ? appPlans.map(p => ({ label: p.name, click: () => sendMenu('openPlan', p.id) }))
+            : [{ label: 'Aucun plan', enabled: false }],
+        },
+        { type: 'separator' },
+        { label: 'Enregistrer', accelerator: 'CmdOrCtrl+S', click: () => sendMenu('save') },
+        { label: 'Enregistrer sous…', accelerator: 'CmdOrCtrl+Shift+S', click: () => sendMenu('saveAs') },
+        { label: 'Ouvrir le dossier des plans', click: () => { fs.mkdirSync(PLANS_DIR, { recursive: true }); shell.openPath(PLANS_DIR); } },
+        { type: 'separator' },
         { label: 'Recharger', accelerator: 'CmdOrCtrl+R', click: load },
         { type: 'separator' },
         { label: 'Quitter', role: 'quit' },
@@ -210,7 +307,7 @@ function createWindow() {
     minHeight: 400,
     backgroundColor: '#dfe4e6',
     icon: path.join(BUNDLED_DIR, 'build', 'icon.png'),
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(BUNDLED_DIR, 'preload.js') },
   });
   // les liens externes s'ouvrent dans le navigateur
   win.webContents.setWindowOpenHandler(({ url }) => {
