@@ -19,9 +19,38 @@ let win = null;
 let watcher = null;
 let reloadTimer = null;
 
+/* ---------- Journal de l'application (Aide > Ouvrir le journal) ----------
+   Chaque étape des opérations sur les fichiers y est notée : si l'application se fige, le journal dit où. */
+const fsp = fs.promises;
+const LOG_FILE = path.join(app.getPath('userData'), 'journal.txt');
+function log(...a) {
+  const line = new Date().toISOString().replace('T', ' ').slice(0, 23) + '  ' + a.map(x => (typeof x === 'string' ? x : JSON.stringify(x))).join(' ') + '\n';
+  fsp.appendFile(LOG_FILE, line).catch(() => {});
+}
+// une opération sur un fichier qui ne répond pas (dossier synchronisé, antivirus…) ne doit jamais figer l'application
+const withTimeout = (p, ms, what) => Promise.race([
+  p, new Promise((_, rej) => setTimeout(() => rej(new Error(what + ' : pas de réponse après ' + ms / 1000 + ' s')), ms)),
+]);
+
 /* ---------- Plans (menu Fichier) ---------- */
 // Les plans s'enregistrent en fichiers .json, par défaut dans « Documents\Studio 3D\Plans ».
+// Si ce dossier ne répond pas ou refuse l'écriture, ils vont dans un dossier de secours de l'application.
 const PLANS_DIR = path.join(USER_DIR, 'Plans');
+const FALLBACK_DIR = path.join(app.getPath('userData'), 'Plans');
+let plansDir = PLANS_DIR;
+async function ensurePlansDir() {
+  try {
+    await withTimeout(fsp.mkdir(plansDir, { recursive: true }), 5000, 'Création du dossier ' + plansDir);
+  } catch (e) {
+    log('dossier des plans indisponible :', e.message);
+    if (plansDir === FALLBACK_DIR) throw e;
+    plansDir = FALLBACK_DIR;
+    await withTimeout(fsp.mkdir(plansDir, { recursive: true }), 5000, 'Création du dossier ' + plansDir);
+    log('dossier de secours :', plansDir);
+  }
+  return plansDir;
+}
+const exists = f => withTimeout(fsp.access(f).then(() => true, () => false), 5000, 'Accès à ' + f).catch(() => false);
 const RECENT_FILE = path.join(app.getPath('userData'), 'plans-recents.json');
 let doc = { name: '', path: null, dirty: false };   // plan ouvert, pour le titre de la fenêtre
 let appPlans = [];                                   // plans gardés dans l'application (ancienne liste « Mes plans »)
@@ -30,7 +59,7 @@ try { recent = JSON.parse(fs.readFileSync(RECENT_FILE, 'utf8')).filter(f => type
 
 function addRecent(file) {
   recent = [file, ...recent.filter(f => f !== file)].slice(0, 8);
-  try { fs.writeFileSync(RECENT_FILE, JSON.stringify(recent)); } catch (e) { /* liste non gardée */ }
+  fsp.writeFile(RECENT_FILE, JSON.stringify(recent)).catch(() => { /* liste non gardée */ });
   refreshMenu();
 }
 
@@ -67,15 +96,17 @@ function checkPage() {
 }
 
 const safeName = n => (String(n || '').replace(/[<>:"/\\|?*\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Plan du studio').slice(0, 80);
-const planDir = () => (doc.path ? path.dirname(doc.path) : PLANS_DIR);
+const planDir = () => (doc.path ? path.dirname(doc.path) : plansDir);
 
-function openPlanFile(file) {
+async function openPlanFile(file) {
   if (!checkPage()) return;
+  log('ouvrir récent', file);
   try {
-    const data = fs.readFileSync(file, 'utf8');
+    const data = await withTimeout(fsp.readFile(file, 'utf8'), 10000, 'Lecture de ' + file);
     sendMenu('opened', { path: file, data });
     addRecent(file);
   } catch (e) {
+    log('erreur', e.message);
     recent = recent.filter(f => f !== file); refreshMenu();
     dialog.showErrorBox('Studio 3D', 'Impossible d’ouvrir ce plan :\n' + e.message);
   }
@@ -83,42 +114,52 @@ function openPlanFile(file) {
 
 // « Ouvrir », « Enregistrer sous » et « Nouveau plan » s'affichent dans la page (fenêtres intégrées) :
 // les boîtes de dialogue de fichiers de Windows peuvent figer l'application sur certains PC.
-function openPlan() { if (checkPage()) sendMenu('openDialog'); }
-function saveAs() { if (checkPage()) sendMenu('saveAsDialog'); }
+function openPlan() { log('menu : Ouvrir'); if (checkPage()) sendMenu('openDialog'); }
+function saveAs() { log('menu : Enregistrer sous'); if (checkPage()) sendMenu('saveAsDialog'); }
 function save() {
+  log('menu : Enregistrer', doc.path || '(pas encore de fichier)');
   if (!checkPage()) return;
   if (doc.path) sendMenu('saveTo', doc.path);
   else sendMenu('saveAsDialog');
 }
-function newPlan() { if (checkPage()) sendMenu('newDialog'); }
+function newPlan() { log('menu : Nouveau plan'); if (checkPage()) sendMenu('newDialog'); }
 
 // fichier de plan correspondant à un nom, dans le dossier des plans
-ipcMain.handle('plan:target', (_, name) => {
-  fs.mkdirSync(PLANS_DIR, { recursive: true });
+ipcMain.handle('plan:target', async (_, name) => {
+  log('cible', name);
+  if (!doc.path) await ensurePlansDir();
   const file = path.join(planDir(), safeName(name) + '.json');
-  return { path: file, exists: fs.existsSync(file), dir: planDir() };
+  const r = { path: file, exists: await exists(file), dir: planDir(), fallback: plansDir === FALLBACK_DIR };
+  log('cible prête', r);
+  return r;
 });
 // plans du dossier, les plus récents d'abord
-ipcMain.handle('plan:files', () => {
-  const dirs = [...new Set([PLANS_DIR, planDir()])];
+ipcMain.handle('plan:files', async () => {
+  log('liste des plans');
+  await ensurePlansDir().catch(() => {});
+  const dirs = [...new Set([PLANS_DIR, FALLBACK_DIR, planDir()])];
   const out = [];
+  const add = async p => {
+    if (out.some(o => o.path === p)) return;
+    try { const st = await withTimeout(fsp.stat(p), 3000, 'Accès à ' + p); out.push({ name: path.basename(p).replace(/\.json$/i, ''), path: p, mtime: st.mtimeMs }); } catch (e) { /* absent */ }
+  };
   for (const d of dirs) {
     try {
-      for (const f of fs.readdirSync(d)) {
-        if (!/\.json$/i.test(f)) continue;
-        const p = path.join(d, f);
-        out.push({ name: f.replace(/\.json$/i, ''), path: p, mtime: fs.statSync(p).mtimeMs });
-      }
-    } catch (e) { /* dossier absent */ }
+      const names = await withTimeout(fsp.readdir(d), 5000, 'Lecture du dossier ' + d);
+      for (const f of names) if (/\.json$/i.test(f)) await add(path.join(d, f));
+    } catch (e) { log('dossier illisible :', e.message); }
   }
-  for (const p of recent) if (!out.some(o => o.path === p) && fs.existsSync(p)) out.push({ name: path.basename(p, '.json'), path: p, mtime: fs.statSync(p).mtimeMs });
+  for (const p of recent) await add(p);
+  log('liste prête :', out.length, 'plan(s)');
   return out.sort((x, y) => y.mtime - x.mtime);
 });
-ipcMain.handle('plan:read', (_, file) => {
-  const data = fs.readFileSync(file, 'utf8');
+ipcMain.handle('plan:read', async (_, file) => {
+  log('lecture', file);
+  const data = await withTimeout(fsp.readFile(file, 'utf8'), 10000, 'Lecture de ' + file);
   addRecent(file);
   return data;
 });
+ipcMain.on('app:log', (_, msg) => log('page :', String(msg).slice(0, 300)));
 // dernier recours : boîte de fichiers de Windows, sans fenêtre parente (elle ne peut pas bloquer la fenêtre principale)
 ipcMain.handle('plan:browse', async (_, { mode, name }) => {
   if (dialogOpen) return null;
@@ -138,12 +179,16 @@ ipcMain.handle('plan:browse', async (_, { mode, name }) => {
 });
 
 // la page envoie le contenu du plan : on l'écrit dans le fichier choisi
-ipcMain.handle('plan:write', (_, { path: file, data }) => {
+ipcMain.handle('plan:write', async (_, { path: file, data }) => {
+  log('écriture', file);
   try {
-    fs.writeFileSync(file, data);
+    await withTimeout(fsp.mkdir(path.dirname(file), { recursive: true }), 5000, 'Création du dossier ' + path.dirname(file));
+    await withTimeout(fsp.writeFile(file, data), 10000, 'Écriture de ' + file);
     addRecent(file);
+    log('écrit');
     return { path: file };
   } catch (e) {
+    log('erreur', e.message);
     dialog.showErrorBox('Studio 3D', 'Impossible d’enregistrer le plan :\n' + e.message);
     return null;
   }
@@ -152,7 +197,8 @@ ipcMain.on('plan:document', (_, d) => { doc = { name: String(d.name || ''), path
 ipcMain.on('plan:list', (_, list) => { appPlans = Array.isArray(list) ? list.slice(0, 50) : []; refreshMenu(); });
 ipcMain.on('app:alert', (_, msg) => { if (win) dialog.showMessageBox(win, { type: 'warning', message: String(msg) }); });
 
-const usingUserCopy = () => fs.existsSync(USER_HTML);
+let userCopy = null;   // mémorisé : évite d'interroger le dossier Documents à chaque changement de titre
+const usingUserCopy = () => (userCopy === null ? (userCopy = fs.existsSync(USER_HTML)) : userCopy);
 const currentHtml = () => (usingUserCopy() ? USER_HTML : path.join(BUNDLED_DIR, HTML));
 
 function copyDir(src, dst) {
@@ -174,6 +220,8 @@ function ensureUserCopy() {
 function load() {
   if (!win) return;
   pageReady = false;
+  userCopy = null;
+  log('chargement', currentHtml());
   win.loadFile(currentHtml());
   updateTitle();
   watch();
@@ -304,7 +352,7 @@ function buildMenu() {
         { type: 'separator' },
         { label: 'Enregistrer', accelerator: 'CmdOrCtrl+S', click: save },
         { label: 'Enregistrer sous…', accelerator: 'CmdOrCtrl+Shift+S', click: saveAs },
-        { label: 'Ouvrir le dossier des plans', click: () => { fs.mkdirSync(PLANS_DIR, { recursive: true }); shell.openPath(PLANS_DIR); } },
+        { label: 'Ouvrir le dossier des plans', click: () => { ensurePlansDir().then(d => shell.openPath(d), e => dialog.showErrorBox('Studio 3D', e.message)); } },
         { type: 'separator' },
         { label: 'Recharger', accelerator: 'CmdOrCtrl+R', click: load },
         { type: 'separator' },
@@ -347,6 +395,7 @@ function buildMenu() {
       submenu: [
         { label: 'Rechercher les mises à jour…', click: checkUpdatesNow },
         { label: 'Toutes les versions sur GitHub', click: () => shell.openExternal(RELEASES_URL) },
+        { label: 'Ouvrir le journal de l’application', click: () => shell.openPath(LOG_FILE) },
         { type: 'separator' },
         { label: 'Version ' + app.getVersion(), enabled: false },
       ],
@@ -374,6 +423,9 @@ function createWindow() {
     if (/^https?:/.test(url)) { e.preventDefault(); shell.openExternal(url); }
   });
   win.on('page-title-updated', e => e.preventDefault());
+  win.on('unresponsive', () => log('la page ne répond plus'));
+  win.on('responsive', () => log('la page répond de nouveau'));
+  win.webContents.on('render-process-gone', (_, d) => log('page arrêtée :', d.reason));
   win.on('closed', () => { win = null; if (watcher) watcher.close(); });
   load();
 }
@@ -382,6 +434,6 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
-  app.whenReady().then(() => { buildMenu(); createWindow(); setupUpdater(); });
+  app.whenReady().then(() => { log('démarrage, version', app.getVersion()); buildMenu(); createWindow(); setupUpdater(); });
   app.on('window-all-closed', () => app.quit());
 }

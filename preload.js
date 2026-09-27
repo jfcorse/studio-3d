@@ -18,4 +18,5 @@ contextBridge.exposeInMainWorld('studioApp', {
   // plans gardés dans l'application, listés dans Fichier > Plans enregistrés dans l'application
   setPlans: list => ipcRenderer.send('plan:list', list),
   alert: msg => ipcRenderer.send('app:alert', msg),
+  log: msg => ipcRenderer.send('app:log', msg),
 });

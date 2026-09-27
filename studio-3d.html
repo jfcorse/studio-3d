@@ -1972,14 +1972,20 @@ if(desktop){
     dlg.querySelector('[data-a=cancel]').onclick=closeDlg;
     dlg.querySelector('[data-a=ok]').onclick=()=>{closeDlg();newPlan();};
   }
-  async function saveAsDialog(){
+  // chaque étape est aussi notée dans le journal de l'application (Aide > Ouvrir le journal)
+  const L=m=>{try{desktop.log&&desktop.log(m);}catch(e){}};
+  function saveAsDialog(){
+    L('Enregistrer sous : ouverture de la fenêtre');
     const def=curName||planName.value.trim()||'Plan du studio';
-    const t0=await desktop.target(def);
-    showDlg('<h3>Enregistrer le plan sous</h3><p>Le plan est enregistré dans <strong>'+esc(t0.dir)+'</strong>.</p>'+
+    showDlg('<h3>Enregistrer le plan sous</h3><p id="dlgDir">Recherche du dossier des plans…</p>'+
       '<input type="text" id="dlgName" maxlength="80" aria-label="Nom du plan" value="'+esc(def)+'">'+
       '<p class="warn" id="dlgWarn" hidden></p>'+
       '<div class="dlgbtns"><button class="ghost left" data-a="browse">Autre dossier…</button><button class="ghost" data-a="cancel">Annuler</button><button data-a="ok" aria-pressed="true">Enregistrer</button></div>');
-    const inp=dlg.querySelector('#dlgName'),warn=dlg.querySelector('#dlgWarn'),ok=dlg.querySelector('[data-a=ok]');
+    const inp=dlg.querySelector('#dlgName'),warn=dlg.querySelector('#dlgWarn'),ok=dlg.querySelector('[data-a=ok]'),dirEl=dlg.querySelector('#dlgDir');
+    const fail=e=>{warn.hidden=false;warn.textContent='Problème : '+(e&&e.message||e);ok.disabled=false;L('Enregistrer sous : erreur '+(e&&e.message||e));};
+    desktop.target(def).then(t=>{
+      dirEl.innerHTML='Le plan est enregistré dans <strong>'+esc(t.dir)+'</strong>.'+(t.fallback?'<br>Le dossier Documents ne répond pas : dossier de secours de l\u2019application.':'');
+    },fail);
     let confirmFor=null;
     inp.focus();inp.select();
     inp.addEventListener('input',()=>{confirmFor=null;warn.hidden=true;ok.textContent='Enregistrer';});
@@ -1987,18 +1993,26 @@ if(desktop){
     dlg.querySelector('[data-a=cancel]').onclick=closeDlg;
     ok.onclick=async()=>{
       const name=inp.value.trim();if(!name){inp.focus();return;}
-      const t=await desktop.target(name);
-      if(t.exists&&t.path!==curPath&&confirmFor!==t.path){
-        confirmFor=t.path;warn.hidden=false;warn.textContent='Un plan « '+baseName(t.path)+' » existe déjà : clique encore sur « Remplacer » pour l\u2019écraser.';ok.textContent='Remplacer';return;
-      }
-      closeDlg();await saveTo(t.path);
+      ok.disabled=true;
+      try{
+        const t=await desktop.target(name);
+        if(t.exists&&t.path!==curPath&&confirmFor!==t.path){
+          confirmFor=t.path;warn.hidden=false;warn.textContent='Un plan « '+baseName(t.path)+' » existe déjà : clique encore sur « Remplacer » pour l\u2019écraser.';ok.textContent='Remplacer';ok.disabled=false;return;
+        }
+        closeDlg();await saveTo(t.path);
+      }catch(e){fail(e);}
     };
     dlg.querySelector('[data-a=browse]').onclick=async()=>{
       closeDlg();const p=await desktop.browse('save',inp.value.trim()||def);if(p)await saveTo(p);
     };
   }
   async function openDialog(){
-    const files=await desktop.listFiles();
+    L('Ouvrir : ouverture de la fenêtre');
+    showDlg('<h3>Ouvrir un plan</h3><p>Recherche des plans…</p><div class="dlgbtns"><button class="ghost" data-a="cancel">Annuler</button></div>');
+    dlg.querySelector('[data-a=cancel]').onclick=closeDlg;
+    let files;
+    try{files=await desktop.listFiles();}catch(e){files=[];L('Ouvrir : erreur '+(e&&e.message||e));}
+    if(!dlg.open)return;
     const fmt=t=>new Date(t).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
     showDlg('<h3>Ouvrir un plan</h3>'+(files.length
       ?'<ul>'+files.map((f,i)=>'<li><button data-i="'+i+'" title="'+esc(f.path)+'"><span>'+esc(f.name)+'</span><span class="d">'+fmt(f.mtime)+'</span></button></li>').join('')+'</ul>'
