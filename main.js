@@ -42,26 +42,9 @@ function updateTitle() {
 
 const sendMenu = (cmd, arg) => { if (win) win.webContents.send('menu', cmd, arg); };
 
-// Une seule boîte de dialogue à la fois, ouverte un instant après la fermeture du menu :
-// sous Windows, ouvrir une boîte modale pendant que le menu se referme (ou reconstruire la barre de menus
-// pendant qu'une boîte est ouverte) peut figer l'application.
+// Une seule boîte de fichiers de Windows à la fois ; la barre de menus n'est pas reconstruite pendant
+// qu'elle est ouverte (sous Windows, ces deux situations peuvent figer l'application).
 let dialogOpen = false;
-const afterMenu = () => new Promise(r => setTimeout(r, 120));
-async function withDialog(fn) {
-  if (dialogOpen || !win) return;
-  dialogOpen = true;
-  try {
-    await afterMenu();
-    if (win.isMinimized()) win.restore();
-    win.focus();
-    return await fn();
-  } catch (e) {
-    dialog.showErrorBox('Studio 3D', String(e && e.message || e));
-  } finally {
-    dialogOpen = false;
-    if (menuPending) refreshMenu();
-  }
-}
 // la barre de menus n'est reconstruite qu'une fois les boîtes de dialogue fermées
 let menuPending = false, menuTimer = null;
 function refreshMenu() {
@@ -98,51 +81,61 @@ function openPlanFile(file) {
   }
 }
 
-function openPlan() {
-  if (!checkPage()) return;
-  withDialog(async () => {
-    fs.mkdirSync(PLANS_DIR, { recursive: true });
-    const r = await dialog.showOpenDialog(win, {
-      title: 'Ouvrir un plan', defaultPath: planDir(),
-      filters: [{ name: 'Plans du studio', extensions: ['json'] }], properties: ['openFile'],
-    });
-    if (!r.canceled && r.filePaths[0]) openPlanFile(r.filePaths[0]);
-  });
-}
-
-function saveAs() {
-  if (!checkPage()) return;
-  withDialog(async () => {
-    fs.mkdirSync(PLANS_DIR, { recursive: true });
-    const r = await dialog.showSaveDialog(win, {
-      title: 'Enregistrer le plan sous',
-      defaultPath: path.join(planDir(), safeName(doc.name) + '.json'),
-      filters: [{ name: 'Plans du studio', extensions: ['json'] }],
-    });
-    if (!r.canceled && r.filePath) sendMenu('saveTo', r.filePath);
-  });
-}
-
+// « Ouvrir », « Enregistrer sous » et « Nouveau plan » s'affichent dans la page (fenêtres intégrées) :
+// les boîtes de dialogue de fichiers de Windows peuvent figer l'application sur certains PC.
+function openPlan() { if (checkPage()) sendMenu('openDialog'); }
+function saveAs() { if (checkPage()) sendMenu('saveAsDialog'); }
 function save() {
   if (!checkPage()) return;
   if (doc.path) sendMenu('saveTo', doc.path);
-  else saveAs();
+  else sendMenu('saveAsDialog');
 }
+function newPlan() { if (checkPage()) sendMenu('newDialog'); }
 
-function newPlan() {
-  if (!checkPage()) return;
-  withDialog(async () => {
-    if (doc.dirty) {
-      const r = await dialog.showMessageBox(win, {
-        type: 'question', buttons: ['Nouveau plan', 'Annuler'], defaultId: 0, cancelId: 1,
-        message: 'Repartir de l’agencement d’origine ?',
-        detail: 'Les modifications du plan « ' + (doc.name || 'sans nom') + ' » qui n’ont pas été enregistrées dans un fichier seront perdues.',
-      });
-      if (r.response !== 0) return;
+// fichier de plan correspondant à un nom, dans le dossier des plans
+ipcMain.handle('plan:target', (_, name) => {
+  fs.mkdirSync(PLANS_DIR, { recursive: true });
+  const file = path.join(planDir(), safeName(name) + '.json');
+  return { path: file, exists: fs.existsSync(file), dir: planDir() };
+});
+// plans du dossier, les plus récents d'abord
+ipcMain.handle('plan:files', () => {
+  const dirs = [...new Set([PLANS_DIR, planDir()])];
+  const out = [];
+  for (const d of dirs) {
+    try {
+      for (const f of fs.readdirSync(d)) {
+        if (!/\.json$/i.test(f)) continue;
+        const p = path.join(d, f);
+        out.push({ name: f.replace(/\.json$/i, ''), path: p, mtime: fs.statSync(p).mtimeMs });
+      }
+    } catch (e) { /* dossier absent */ }
+  }
+  for (const p of recent) if (!out.some(o => o.path === p) && fs.existsSync(p)) out.push({ name: path.basename(p, '.json'), path: p, mtime: fs.statSync(p).mtimeMs });
+  return out.sort((x, y) => y.mtime - x.mtime);
+});
+ipcMain.handle('plan:read', (_, file) => {
+  const data = fs.readFileSync(file, 'utf8');
+  addRecent(file);
+  return data;
+});
+// dernier recours : boîte de fichiers de Windows, sans fenêtre parente (elle ne peut pas bloquer la fenêtre principale)
+ipcMain.handle('plan:browse', async (_, { mode, name }) => {
+  if (dialogOpen) return null;
+  dialogOpen = true;
+  try {
+    const filters = [{ name: 'Plans du studio', extensions: ['json'] }];
+    if (mode === 'save') {
+      const r = await dialog.showSaveDialog({ title: 'Enregistrer le plan sous', defaultPath: path.join(planDir(), safeName(name) + '.json'), filters });
+      return r.canceled ? null : r.filePath;
     }
-    sendMenu('new');
-  });
-}
+    const r = await dialog.showOpenDialog({ title: 'Ouvrir un plan', defaultPath: planDir(), filters, properties: ['openFile'] });
+    return r.canceled ? null : r.filePaths[0];
+  } finally {
+    dialogOpen = false;
+    if (menuPending) refreshMenu();
+  }
+});
 
 // la page envoie le contenu du plan : on l'écrit dans le fichier choisi
 ipcMain.handle('plan:write', (_, { path: file, data }) => {

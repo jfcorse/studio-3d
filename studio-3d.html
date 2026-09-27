@@ -58,6 +58,21 @@ body{background:var(--bg);color:var(--ink);overflow:hidden;
 .plans .empty{border:none;padding:0;font-size:.85rem;color:var(--muted)}
 h1{font-size:1.25rem;font-weight:600;margin:0 0 2px;letter-spacing:-.01em}
 h2{font-size:.95rem;font-weight:600;margin:14px 0 8px}
+/* fenêtres intégrées de l'application (Ouvrir, Enregistrer sous, Nouveau plan) */
+.appdlg{border:1px solid var(--line);border-radius:14px;padding:18px 20px;width:min(440px,calc(100vw - 32px));
+  background:var(--bg);color:var(--ink);box-shadow:0 18px 50px rgba(0,0,0,.28)}
+.appdlg::backdrop{background:rgba(10,16,18,.45)}
+.appdlg h3{margin:0 0 10px;font-size:1.05rem;font-weight:600}
+.appdlg p{margin:0 0 10px;font-size:.88rem;color:var(--muted);line-height:1.4}
+.appdlg input[type=text]{width:100%;font:inherit;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:0 0 10px}
+.appdlg input[type=text]:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.appdlg .dlgbtns{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:12px}
+.appdlg .dlgbtns .left{margin-right:auto}
+.appdlg .warn{color:#b4533c}
+.appdlg ul{list-style:none;margin:0;padding:0;max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.appdlg li button{width:100%;display:flex;justify-content:space-between;gap:10px;text-align:left;border-radius:10px;border-color:var(--line);color:var(--ink)}
+.appdlg li button:hover,.appdlg li button:focus-visible{border-color:var(--accent)}
+.appdlg li .d{color:var(--muted);font-size:.78rem;white-space:nowrap}
 /* accordéons du panneau */
 .acc{border-top:1px solid var(--line);padding:0}
 .acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;
@@ -1550,7 +1565,7 @@ for(const k in wIn){
 }
 rotBtn.addEventListener('click',()=>rotate(90));
 rot15Btn.addEventListener('click',()=>rotate(15));
-window.addEventListener('keydown',e=>{if((e.key==='r'||e.key==='R')&&selected){rotate(e.shiftKey?15:90);}});
+window.addEventListener('keydown',e=>{if((e.key==='r'||e.key==='R')&&selected&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){rotate(e.shiftKey?15:90);}});
 
 function applyDefaults(){
   items.forEach(it=>{it.obj.position.set(it.def.x,0,it.def.z);it.obj.rotation.y=it.def.r;});
@@ -1829,6 +1844,62 @@ if(desktop){
     curPath=r.path;curName=name;dirty=false;syncTitle();
     showMsg('Plan « '+curName+' » enregistré dans '+curPath);
   }
+  /* fenêtres intégrées : pas de boîte de fichiers de Windows (elles figent l'application sur certains PC) */
+  const dlg=document.createElement('dialog');dlg.className='appdlg';document.body.appendChild(dlg);
+  const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  function showDlg(html){dlg.innerHTML=html;if(!dlg.open)dlg.showModal();}
+  function closeDlg(){if(dlg.open)dlg.close();}
+  function newPlan(){applyPlan(DEFAULT_STATE);curPath=null;curName='';dirty=false;syncTitle();showMsg('Nouveau plan (agencement d\u2019origine).');}
+  function newDialog(){
+    if(!dirty){newPlan();return;}
+    showDlg('<h3>Nouveau plan</h3><p>Repartir de l\u2019agencement d\u2019origine ? Les modifications'+(curName?' du plan « '+esc(curName)+' »':'')+' qui n\u2019ont pas été enregistrées dans un fichier seront perdues.</p>'+
+      '<div class="dlgbtns"><button class="ghost" data-a="cancel">Annuler</button><button data-a="ok" aria-pressed="true">Nouveau plan</button></div>');
+    dlg.querySelector('[data-a=cancel]').onclick=closeDlg;
+    dlg.querySelector('[data-a=ok]').onclick=()=>{closeDlg();newPlan();};
+  }
+  async function saveAsDialog(){
+    const def=curName||planName.value.trim()||'Plan du studio';
+    const t0=await desktop.target(def);
+    showDlg('<h3>Enregistrer le plan sous</h3><p>Le plan est enregistré dans <strong>'+esc(t0.dir)+'</strong>.</p>'+
+      '<input type="text" id="dlgName" maxlength="80" aria-label="Nom du plan" value="'+esc(def)+'">'+
+      '<p class="warn" id="dlgWarn" hidden></p>'+
+      '<div class="dlgbtns"><button class="ghost left" data-a="browse">Autre dossier…</button><button class="ghost" data-a="cancel">Annuler</button><button data-a="ok" aria-pressed="true">Enregistrer</button></div>');
+    const inp=dlg.querySelector('#dlgName'),warn=dlg.querySelector('#dlgWarn'),ok=dlg.querySelector('[data-a=ok]');
+    let confirmFor=null;
+    inp.focus();inp.select();
+    inp.addEventListener('input',()=>{confirmFor=null;warn.hidden=true;ok.textContent='Enregistrer';});
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ok.click();}});
+    dlg.querySelector('[data-a=cancel]').onclick=closeDlg;
+    ok.onclick=async()=>{
+      const name=inp.value.trim();if(!name){inp.focus();return;}
+      const t=await desktop.target(name);
+      if(t.exists&&t.path!==curPath&&confirmFor!==t.path){
+        confirmFor=t.path;warn.hidden=false;warn.textContent='Un plan « '+baseName(t.path)+' » existe déjà : clique encore sur « Remplacer » pour l\u2019écraser.';ok.textContent='Remplacer';return;
+      }
+      closeDlg();await saveTo(t.path);
+    };
+    dlg.querySelector('[data-a=browse]').onclick=async()=>{
+      closeDlg();const p=await desktop.browse('save',inp.value.trim()||def);if(p)await saveTo(p);
+    };
+  }
+  async function openDialog(){
+    const files=await desktop.listFiles();
+    const fmt=t=>new Date(t).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    showDlg('<h3>Ouvrir un plan</h3>'+(files.length
+      ?'<ul>'+files.map((f,i)=>'<li><button data-i="'+i+'" title="'+esc(f.path)+'"><span>'+esc(f.name)+'</span><span class="d">'+fmt(f.mtime)+'</span></button></li>').join('')+'</ul>'
+      :'<p>Aucun plan enregistré pour l\u2019instant. Utilise Fichier > Enregistrer sous pour en créer un.</p>')+
+      '<div class="dlgbtns"><button class="ghost left" data-a="browse">Autre dossier…</button><button class="ghost" data-a="cancel">Annuler</button></div>');
+    dlg.querySelectorAll('li button').forEach(b=>b.onclick=async()=>{
+      const f=files[+b.dataset.i];closeDlg();
+      try{loadPlanJson(await desktop.readFile(f.path),f.path);}catch(e){desktop.alert('Ce fichier n\u2019est pas un plan du studio.');}
+    });
+    const first=dlg.querySelector('li button');if(first)first.focus();
+    dlg.querySelector('[data-a=cancel]').onclick=closeDlg;
+    dlg.querySelector('[data-a=browse]').onclick=async()=>{
+      closeDlg();const p=await desktop.browse('open');
+      if(p){try{loadPlanJson(await desktop.readFile(p),p);}catch(e){desktop.alert('Ce fichier n\u2019est pas un plan du studio.');}}
+    };
+  }
   function loadPlanJson(text,path){
     const j=JSON.parse(text);const st=j&&j.state?j.state:j;
     if(!st||!st.items)throw new Error('format');
@@ -1839,7 +1910,10 @@ if(desktop){
   desktop.onMenu(async(cmd,arg)=>{
     try{
       if(cmd==='saveTo')await saveTo(arg);
-      else if(cmd==='new'){applyPlan(DEFAULT_STATE);curPath=null;curName='';dirty=false;syncTitle();showMsg('Nouveau plan (agencement d\u2019origine).');}
+      else if(cmd==='saveAsDialog')await saveAsDialog();
+      else if(cmd==='openDialog')await openDialog();
+      else if(cmd==='newDialog')newDialog();
+      else if(cmd==='new')newPlan();
       else if(cmd==='opened')loadPlanJson(arg.data,arg.path);
       else if(cmd==='openPlan'){const p=plansCache.find(x=>x.id===arg);if(p&&p.state){applyPlan(p.state);curPath=null;curName=p.name||'';dirty=true;syncTitle();showMsg('Plan « '+curName+' » ouvert. Fichier > Enregistrer sous pour le garder dans un fichier.');}}
     }catch(e){desktop.alert(cmd==='opened'?'Ce fichier n\u2019est pas un plan du studio.':'L\u2019opération n\u2019a pas abouti : '+(e&&e.message||e));}
