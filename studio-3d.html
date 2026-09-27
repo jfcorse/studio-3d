@@ -1821,19 +1821,13 @@ if(desktop){
   const syncTitle=()=>desktop.setDocument({name:curName,path:curPath,dirty});
   const planData=name=>JSON.stringify({app:'studio-3d',name,savedAt:Date.now(),state:getState()},null,2);
   const showMsg=t=>{const el=document.getElementById('autosave');if(el)el.textContent=t;};
-  async function saveAs(){
-    const name=curName||planName.value.trim()||'Plan du studio';
-    const r=await desktop.saveFile({path:null,suggested:slug(name)+'.json',data:planData(name)});
+  // l'application a choisi le fichier (Enregistrer / Enregistrer sous) : la page y écrit le plan
+  async function saveTo(path){
+    const name=baseName(path);
+    const r=await desktop.writeFile(path,planData(name));
     if(!r||!r.path)return;
-    curPath=r.path;curName=baseName(r.path);dirty=false;
-    // le nom du fichier devient le nom du plan, et le fichier est réécrit avec ce nom
-    await desktop.saveFile({path:curPath,data:planData(curName)});
-    syncTitle();showMsg('Plan enregistré dans '+curPath);
-  }
-  async function saveCur(){
-    if(!curPath)return saveAs();
-    const r=await desktop.saveFile({path:curPath,data:planData(curName)});
-    if(r&&r.path){dirty=false;syncTitle();showMsg('Plan « '+curName+' » enregistré.');}
+    curPath=r.path;curName=name;dirty=false;syncTitle();
+    showMsg('Plan « '+curName+' » enregistré dans '+curPath);
   }
   function loadPlanJson(text,path){
     const j=JSON.parse(text);const st=j&&j.state?j.state:j;
@@ -1844,12 +1838,11 @@ if(desktop){
   }
   desktop.onMenu(async(cmd,arg)=>{
     try{
-      if(cmd==='save')await saveCur();
-      else if(cmd==='saveAs')await saveAs();
+      if(cmd==='saveTo')await saveTo(arg);
       else if(cmd==='new'){applyPlan(DEFAULT_STATE);curPath=null;curName='';dirty=false;syncTitle();showMsg('Nouveau plan (agencement d\u2019origine).');}
       else if(cmd==='opened')loadPlanJson(arg.data,arg.path);
       else if(cmd==='openPlan'){const p=plansCache.find(x=>x.id===arg);if(p&&p.state){applyPlan(p.state);curPath=null;curName=p.name||'';dirty=true;syncTitle();showMsg('Plan « '+curName+' » ouvert. Fichier > Enregistrer sous pour le garder dans un fichier.');}}
-    }catch(e){desktop.alert('Ce fichier n\u2019est pas un plan du studio.');}
+    }catch(e){desktop.alert(cmd==='opened'?'Ce fichier n\u2019est pas un plan du studio.':'L\u2019opération n\u2019a pas abouti : '+(e&&e.message||e));}
   });
   // chaque modification marque le plan comme non enregistré (l'agencement reste sauvegardé automatiquement)
   const _save=save;save=function(){_save();if(!dirty){dirty=true;syncTitle();}};
@@ -1857,6 +1850,7 @@ if(desktop){
   const _render=renderPlans;renderPlans=function(list){_render(list);desktop.setPlans(list.map(p=>({id:p.id,name:p.name||'Sans nom'})));};
   renderPlans(plansCache);
   syncTitle();
+  desktop.ready();
 }
 
 sofaBackBtn.addEventListener('click',()=>{sofaBackTarget=sofaBackTarget>0.5?0:1;syncSofaBackBtn();save();});

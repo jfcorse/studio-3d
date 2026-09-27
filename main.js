@@ -31,7 +31,7 @@ try { recent = JSON.parse(fs.readFileSync(RECENT_FILE, 'utf8')).filter(f => type
 function addRecent(file) {
   recent = [file, ...recent.filter(f => f !== file)].slice(0, 8);
   try { fs.writeFileSync(RECENT_FILE, JSON.stringify(recent)); } catch (e) { /* liste non gardée */ }
-  buildMenu();
+  refreshMenu();
 }
 
 function updateTitle() {
@@ -42,48 +42,110 @@ function updateTitle() {
 
 const sendMenu = (cmd, arg) => { if (win) win.webContents.send('menu', cmd, arg); };
 
+// Une seule boîte de dialogue à la fois, ouverte un instant après la fermeture du menu :
+// sous Windows, ouvrir une boîte modale pendant que le menu se referme (ou reconstruire la barre de menus
+// pendant qu'une boîte est ouverte) peut figer l'application.
+let dialogOpen = false;
+const afterMenu = () => new Promise(r => setTimeout(r, 120));
+async function withDialog(fn) {
+  if (dialogOpen || !win) return;
+  dialogOpen = true;
+  try {
+    await afterMenu();
+    if (win.isMinimized()) win.restore();
+    win.focus();
+    return await fn();
+  } catch (e) {
+    dialog.showErrorBox('Studio 3D', String(e && e.message || e));
+  } finally {
+    dialogOpen = false;
+    if (menuPending) refreshMenu();
+  }
+}
+// la barre de menus n'est reconstruite qu'une fois les boîtes de dialogue fermées
+let menuPending = false, menuTimer = null;
+function refreshMenu() {
+  if (dialogOpen) { menuPending = true; return; }
+  menuPending = false;
+  clearTimeout(menuTimer);
+  menuTimer = setTimeout(buildMenu, 50);
+}
+
+// La page doit savoir gérer le menu Fichier ; une ancienne copie modifiée du code (menu Code) ne le sait pas.
+let pageReady = false;
+ipcMain.on('plan:ready', () => { pageReady = true; });
+function checkPage() {
+  if (pageReady) return true;
+  dialog.showMessageBox(win, {
+    type: 'warning', message: 'Cette version du code ne gère pas encore le menu Fichier.',
+    detail: usingUserCopy() ? 'Tu utilises une copie modifiée du code, plus ancienne que l’application. Fais Code > Revenir à la version d’origine, ou recopie tes changements dans la nouvelle version.' : 'Recharge la page (Ctrl+R) puis réessaie.',
+  });
+  return false;
+}
+
+const safeName = n => (String(n || '').replace(/[<>:"/\\|?*\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Plan du studio').slice(0, 80);
+const planDir = () => (doc.path ? path.dirname(doc.path) : PLANS_DIR);
+
 function openPlanFile(file) {
+  if (!checkPage()) return;
   try {
     const data = fs.readFileSync(file, 'utf8');
     sendMenu('opened', { path: file, data });
     addRecent(file);
   } catch (e) {
-    recent = recent.filter(f => f !== file); buildMenu();
+    recent = recent.filter(f => f !== file); refreshMenu();
     dialog.showErrorBox('Studio 3D', 'Impossible d’ouvrir ce plan :\n' + e.message);
   }
 }
 
-async function openPlan() {
-  fs.mkdirSync(PLANS_DIR, { recursive: true });
-  const r = await dialog.showOpenDialog(win, {
-    title: 'Ouvrir un plan', defaultPath: doc.path ? path.dirname(doc.path) : PLANS_DIR,
-    filters: [{ name: 'Plans du studio', extensions: ['json'] }], properties: ['openFile'],
-  });
-  if (!r.canceled && r.filePaths[0]) openPlanFile(r.filePaths[0]);
-}
-
-async function newPlan() {
-  if (doc.dirty) {
-    const r = await dialog.showMessageBox(win, {
-      type: 'question', buttons: ['Nouveau plan', 'Annuler'], defaultId: 0, cancelId: 1,
-      message: 'Repartir de l’agencement d’origine ?',
-      detail: 'Les modifications du plan « ' + (doc.name || 'sans nom') + ' » qui n’ont pas été enregistrées dans un fichier seront perdues.',
+function openPlan() {
+  if (!checkPage()) return;
+  withDialog(async () => {
+    fs.mkdirSync(PLANS_DIR, { recursive: true });
+    const r = await dialog.showOpenDialog(win, {
+      title: 'Ouvrir un plan', defaultPath: planDir(),
+      filters: [{ name: 'Plans du studio', extensions: ['json'] }], properties: ['openFile'],
     });
-    if (r.response !== 0) return;
-  }
-  sendMenu('new');
+    if (!r.canceled && r.filePaths[0]) openPlanFile(r.filePaths[0]);
+  });
 }
 
-ipcMain.handle('plan:save', async (_, { path: file, suggested, data }) => {
-  if (!file) {
+function saveAs() {
+  if (!checkPage()) return;
+  withDialog(async () => {
     fs.mkdirSync(PLANS_DIR, { recursive: true });
     const r = await dialog.showSaveDialog(win, {
-      title: 'Enregistrer le plan', defaultPath: path.join(doc.path ? path.dirname(doc.path) : PLANS_DIR, suggested || 'plan-du-studio.json'),
+      title: 'Enregistrer le plan sous',
+      defaultPath: path.join(planDir(), safeName(doc.name) + '.json'),
       filters: [{ name: 'Plans du studio', extensions: ['json'] }],
     });
-    if (r.canceled || !r.filePath) return null;
-    file = r.filePath;
-  }
+    if (!r.canceled && r.filePath) sendMenu('saveTo', r.filePath);
+  });
+}
+
+function save() {
+  if (!checkPage()) return;
+  if (doc.path) sendMenu('saveTo', doc.path);
+  else saveAs();
+}
+
+function newPlan() {
+  if (!checkPage()) return;
+  withDialog(async () => {
+    if (doc.dirty) {
+      const r = await dialog.showMessageBox(win, {
+        type: 'question', buttons: ['Nouveau plan', 'Annuler'], defaultId: 0, cancelId: 1,
+        message: 'Repartir de l’agencement d’origine ?',
+        detail: 'Les modifications du plan « ' + (doc.name || 'sans nom') + ' » qui n’ont pas été enregistrées dans un fichier seront perdues.',
+      });
+      if (r.response !== 0) return;
+    }
+    sendMenu('new');
+  });
+}
+
+// la page envoie le contenu du plan : on l'écrit dans le fichier choisi
+ipcMain.handle('plan:write', (_, { path: file, data }) => {
   try {
     fs.writeFileSync(file, data);
     addRecent(file);
@@ -94,7 +156,7 @@ ipcMain.handle('plan:save', async (_, { path: file, suggested, data }) => {
   }
 });
 ipcMain.on('plan:document', (_, d) => { doc = { name: String(d.name || ''), path: d.path || null, dirty: !!d.dirty }; updateTitle(); });
-ipcMain.on('plan:list', (_, list) => { appPlans = Array.isArray(list) ? list.slice(0, 50) : []; buildMenu(); });
+ipcMain.on('plan:list', (_, list) => { appPlans = Array.isArray(list) ? list.slice(0, 50) : []; refreshMenu(); });
 ipcMain.on('app:alert', (_, msg) => { if (win) dialog.showMessageBox(win, { type: 'warning', message: String(msg) }); });
 
 const usingUserCopy = () => fs.existsSync(USER_HTML);
@@ -118,6 +180,7 @@ function ensureUserCopy() {
 
 function load() {
   if (!win) return;
+  pageReady = false;
   win.loadFile(currentHtml());
   updateTitle();
   watch();
@@ -242,12 +305,12 @@ function buildMenu() {
         {
           label: 'Plans enregistrés dans l’application',
           submenu: appPlans.length
-            ? appPlans.map(p => ({ label: p.name, click: () => sendMenu('openPlan', p.id) }))
+            ? appPlans.map(p => ({ label: p.name, click: () => { if (checkPage()) sendMenu('openPlan', p.id); } }))
             : [{ label: 'Aucun plan', enabled: false }],
         },
         { type: 'separator' },
-        { label: 'Enregistrer', accelerator: 'CmdOrCtrl+S', click: () => sendMenu('save') },
-        { label: 'Enregistrer sous…', accelerator: 'CmdOrCtrl+Shift+S', click: () => sendMenu('saveAs') },
+        { label: 'Enregistrer', accelerator: 'CmdOrCtrl+S', click: save },
+        { label: 'Enregistrer sous…', accelerator: 'CmdOrCtrl+Shift+S', click: saveAs },
         { label: 'Ouvrir le dossier des plans', click: () => { fs.mkdirSync(PLANS_DIR, { recursive: true }); shell.openPath(PLANS_DIR); } },
         { type: 'separator' },
         { label: 'Recharger', accelerator: 'CmdOrCtrl+R', click: load },
