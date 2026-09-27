@@ -742,6 +742,7 @@ M.basinRed=new THREE.MeshStandardMaterial({color:0xb3262e,roughness:0.4});
 M.bathSpotLens=new THREE.MeshStandardMaterial({color:0xfafafa,emissive:0xffe8c4,emissiveIntensity:0});
 const bathSpots=[];
 let bathDoorG,bathDoorItem,showerItem;
+const wcG=new THREE.Group(),basinG=new THREE.Group();   // WC et lave-main, déplaçables dans la salle de bain
 {
   // sol carrelé
   const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d');
@@ -794,24 +795,24 @@ let bathDoorG,bathDoorItem,showerItem;
   showerItem={id:'shower',name:'Douche',obj:showerG,fixed:true,noRotate:true,info:'100 × 70 cm, bac blanc, colonne de douche, porte coulissante en verre de 2 × 30 cm (clique sur la porte pour l\u2019ouvrir)'};
   showerG.userData.item=showerItem;
 
-  // WC suspendu blanc, en face de la porte, à droite
-  const wx=(SBX0+SX0)/2-0.02;
-  box(kitchenG,M.ceramic,wx-0.17,wx+0.17,0.20,0.40,SBZ1-0.26,SBZ1);
-  const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.14,0.20,24),M.ceramic);bowl.scale.z=1.25;bowl.position.set(wx,0.30,SBZ1-0.33);bowl.castShadow=true;kitchenG.add(bowl);
-  const seat=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.025,24),M.ceramic);seat.scale.z=1.25;seat.position.set(wx,0.415,SBZ1-0.33);kitchenG.add(seat);
-  box(kitchenG,M.ceramic,wx-0.17,wx+0.17,0.40,0.43,SBZ1-0.14,SBZ1-0.02);
-  box(kitchenG,M.ceramic,wx-0.12,wx+0.12,1.00,1.16,SBZ1-0.012,SBZ1,false);   // plaque de commande
-  box(kitchenG,M.chrome,wx-0.09,wx-0.005,1.04,1.12,SBZ1-0.016,SBZ1-0.012,false);
-  box(kitchenG,M.chrome,wx+0.005,wx+0.09,1.04,1.12,SBZ1-0.016,SBZ1-0.012,false);
+  // WC suspendu blanc, en face de la porte, à droite — déplaçable (enregistré plus bas comme meuble)
+  // repère local : centre du WC, dos (plaque de commande) du côté +z
+  box(wcG,M.ceramic,-0.17,0.17,0.20,0.40,0.01,0.27);
+  const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.14,0.20,24),M.ceramic);bowl.scale.z=1.25;bowl.position.set(0,0.30,-0.06);bowl.castShadow=true;wcG.add(bowl);
+  const seat=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.025,24),M.ceramic);seat.scale.z=1.25;seat.position.set(0,0.415,-0.06);wcG.add(seat);
+  box(wcG,M.ceramic,-0.17,0.17,0.40,0.43,0.13,0.25);
+  box(wcG,M.ceramic,-0.12,0.12,1.00,1.16,0.258,0.27,false);   // plaque de commande
+  box(wcG,M.chrome,-0.09,-0.005,1.04,1.12,0.254,0.258,false);
+  box(wcG,M.chrome,0.005,0.09,1.04,1.12,0.254,0.258,false);
 
-  // lave-main 30 × 30 cm dans l'angle à droite en entrant : meuble rouge, lavabo blanc encastré, robinet
-  const lx0=SBX0,lx1=SBX0+0.30,lz0=SBZ0,lz1=SBZ0+0.30;
-  box(kitchenG,M.basinRed,lx0,lx1,0.12,0.80,lz0,lz1);
-  box(kitchenG,M.ceramic,lx0,lx1,0.80,0.84,lz0,lz1);
+  // lave-main 30 × 30 cm dans l'angle à droite en entrant : meuble rouge, lavabo blanc encastré, robinet — déplaçable
+  // repère local : centre du meuble, robinet dans l'angle arrière (−x, −z)
+  box(basinG,M.basinRed,-0.15,0.15,0.12,0.80,-0.15,0.15);
+  box(basinG,M.ceramic,-0.15,0.15,0.80,0.84,-0.15,0.15);
   const sink=new THREE.Mesh(new THREE.CylinderGeometry(0.105,0.09,0.03,24),new THREE.MeshStandardMaterial({color:0xe4e4e2,roughness:0.2}));
-  sink.position.set((lx0+lx1)/2+0.02,0.83,(lz0+lz1)/2+0.02);kitchenG.add(sink);
-  cyl(kitchenG,M.chrome,lx0+0.05,0.84,0.99,lz0+0.05,0.011);
-  const spout=new THREE.Mesh(new THREE.CylinderGeometry(0.009,0.009,0.10,10),M.chrome);spout.rotation.set(-Math.PI/4,0,Math.PI/4);spout.position.set(lx0+0.085,0.97,lz0+0.085);kitchenG.add(spout);
+  sink.position.set(0.02,0.83,0.02);basinG.add(sink);
+  cyl(basinG,M.chrome,-0.10,0.84,0.99,-0.10,0.011);
+  const spout=new THREE.Mesh(new THREE.CylinderGeometry(0.009,0.009,0.10,10),M.chrome);spout.rotation.set(-Math.PI/4,0,Math.PI/4);spout.position.set(-0.065,0.97,-0.065);basinG.add(spout);
 
   // deux spots au plafond
   [SBC-0.40,SBC+0.40].forEach(x=>{
@@ -1492,6 +1493,12 @@ let kitchenItem;
   kitchenItem=addItem('kfurn','Cuisine (plan de travail)',kitchen,CW,CL,{x:cpx,z:cpz,r:0},'plan de travail avec évier et micro-ondes');
   kitchenItem.bounds={x0:KX1,x1:KX0,z0:KZ0,z1:KZ1};
 }
+// WC et lave-main : déplaçables et pivotables (touche R) dans la salle de bain, hors de la douche
+const BATH_FREE={x0:SBX0,x1:SBX1-SHW,z0:SBZ0,z1:SBZ1};
+const wcItem=addItem('wc','WC suspendu',wcG,0.36,0.54,{x:(SBX0+SBX1-SHW)/2-0.02,z:SBZ1-0.27,r:0},'blanc, avec plaque de commande');
+wcItem.bounds=BATH_FREE;
+const basinItem=addItem('basin','Lave-main',basinG,0.30,0.30,{x:SBX0+0.15,z:SBZ0+0.15,r:0},'30 × 30 cm, meuble rouge, lavabo blanc encastré et robinet');
+basinItem.bounds=BATH_FREE;
 
 /* ---------- Couleurs : sol et grande armoire ---------- */
 const FLOOR_PRESETS={
@@ -1732,7 +1739,7 @@ function groupItems(k){
   if(k==='wardrobe')return[wardItem];
   if(k==='fan')return[fanItem];
   if(k==='garden'||k==='mountains')return[];
-  if(k==='kitchen')return[kitchenItem];
+  if(k==='kitchen')return[kitchenItem,wcItem,basinItem];
   if(k==='plant')return[plantItem];
   return items.filter(i=>i.id.startsWith('chair'));
 }
@@ -1817,7 +1824,7 @@ function loadInto(s){
   if(s&&s.items){
     items.forEach(it=>{const p=s.items[it.id];if(p){it.obj.position.set(p.x,0,p.z);it.obj.rotation.y=p.r;}});
     items.forEach(it=>{if(it.wallSnap)snapWall(it);});
-    clampItem(kitchenItem);   // la cuisine a pu changer de dimensions depuis l'enregistrement
+    [kitchenItem,wcItem,basinItem].forEach(clampItem);   // la cuisine et la salle de bain ont pu changer depuis l'enregistrement
     if(s.tableOpen===0){tableTarget=0;tableT=0;}
     if(s.sofaBack===1){sofaBackTarget=1;sofaBackT=1;sofaBack.rotation.x=-Math.PI/2;clampItem(sofaItem);}
   }
