@@ -353,6 +353,19 @@ function setRay(e){
   ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
   ray.setFromCamera(ndc,camera);
 }
+// porte sous le pointeur (la plus proche, pas cachée par un mur ou un meuble)
+const shown=o=>{for(;o;o=o.parent)if(!o.visible)return false;return true;};
+function pickOpenable(){
+  const targets=[];
+  openables.forEach(o=>o.objs().forEach(ob=>{if(shown(ob))targets.push(ob);}));
+  items.forEach(i=>{if(shown(i.obj))targets.push(i.obj);});targets.push(arm);
+  walls.forEach(w=>{if(w.op>0.98&&shown(w.g))targets.push(w.g);});
+  const hits=ray.intersectObjects(targets,true);
+  if(!hits.length)return null;
+  for(let o=hits[0].object;o;o=o.parent)if(o.userData.openable)return o.userData.openable;
+  return null;
+}
+function toggleOpenable(o){o.target=o.target>0.5?0:1;syncBedDoorBtns();save();}
 function pickItem(){
   if(frozen)return null;   // éléments figés : un clic ne sélectionne plus rien, la vue tourne librement
   const targets=items.filter(i=>i.obj.visible).map(i=>i.obj);targets.push(arm);
@@ -367,12 +380,13 @@ function pickItem(){
 }
 canvas.addEventListener('pointerdown',e=>{
   if(e.button!==0)return;
-  down={x:e.clientX,y:e.clientY};
+  down={x:e.clientX,y:e.clientY,door:null,keepSel:false};
   setRay(e);
+  down.door=pickOpenable();   // un clic sans glisser sur une porte l'ouvre ou la ferme
   const it=pickItem();
   if(!it)return;
   select(it);
-  if(it.fixed){down=null;return;}   // non déplaçable : reste sélectionné au relâchement, la vue peut tourner normalement
+  if(it.fixed){down.keepSel=true;return;}   // non déplaçable : reste sélectionné au relâchement, la vue peut tourner normalement
   ray.ray.intersectPlane(floorPlane,hitP);
   drag={it,dx:it.obj.position.x-hitP.x,dz:it.obj.position.z-hitP.z};
   controls.enabled=false;
@@ -388,8 +402,10 @@ canvas.addEventListener('pointermove',e=>{
   clampItem(drag.it);
 });
 function endDrag(e){
-  if(drag){drag=null;controls.enabled=true;save();return;}
-  if(down&&e&&Math.hypot(e.clientX-down.x,e.clientY-down.y)<4)select(null);
+  const click=!!(down&&e&&Math.hypot(e.clientX-down.x,e.clientY-down.y)<4);
+  if(click&&down.door)toggleOpenable(down.door);
+  if(drag){drag=null;controls.enabled=true;save();down=null;return;}
+  if(click&&!down.keepSel&&!down.door)select(null);
   down=null;
 }
 canvas.addEventListener('pointerup',endDrag);
@@ -624,12 +640,19 @@ function leaf({w,h,t=0.045,glass=false,halfGlass=false,mat=M.door,handleY=1.02})
   box(g,M.metal,w-0.10,w-0.07,hy-0.08,hy+0.08,-t/2-0.035,t/2+0.035);
   return g;
 }
-const doors=[];
+// Éléments ouvrables : chaque porte (ou paire de vantaux) a son propre état d'ouverture.
+// Un clic dessus l'ouvre ou la ferme ; « Ouvrir les portes » les ouvre ou les ferme toutes.
+const openables=[];
+function openable(id,apply,objs,speed=1.1){
+  const o={id,t:0,target:0,apply,objs,speed};openables.push(o);return o;
+}
+const swing=ps=>e=>ps.forEach(p=>{const h=p.userData.hinge;p.rotation.y=h.closed+(h.open-h.closed)*e;});
 function hinge(lf,x,y,z,closed,open){
   const p=new THREE.Group();p.position.set(x,y,z);p.add(lf);p.rotation.y=closed;scene.add(p);
-  doors.push({p,closed,open});
+  p.userData.hinge={closed,open};
   return p;
 }
+function markOpenable(o,...objs){objs.forEach(ob=>ob.userData.openable=o);return o;}
 // Portes-fenêtres anciennes : dormant au fond de l'ébrasement, imposte vitrée à 2 carreaux,
 // 2 vantaux avec soubassement plein, grand vitrage et voilage ; ils s'ouvrent dans l'ébrasement.
 M.sill=new THREE.MeshStandardMaterial({color:0xd9d3c7,roughness:0.6});
@@ -664,8 +687,9 @@ function frenchWindow(z0){
   box(scene,M.frame,fx0,fx1,LH+0.07,OH-fw,zm-0.025,zm+0.025);
   box(scene,M.glass,FX-0.005,FX+0.005,LH+0.07,OH-fw,z0+fw,z1-fw,false);
   const lw=(1.00-2*fw)/2-0.003;
-  hinge(frenchLeaf(lw,LH-0.03,-1),FX,0.02,z0+fw,-Math.PI/2,-0.06);
-  hinge(frenchLeaf(lw,LH-0.03,1),FX,0.02,z1-fw, Math.PI/2, 0.06);
+  const a=hinge(frenchLeaf(lw,LH-0.03,-1),FX,0.02,z0+fw,-Math.PI/2,-0.06);
+  const b=hinge(frenchLeaf(lw,LH-0.03,1),FX,0.02,z1-fw, Math.PI/2, 0.06);
+  markOpenable(openable('fw'+z0,swing([a,b]),()=>[a,b]),a,b);
 }
 frenchWindow(0.48);
 frenchWindow(2.64);
@@ -695,12 +719,14 @@ box(kitchenG,M.slab,KX1-KT,KX0,-0.08,0,KZ0-KT,KZ1+KT,false);
 kitchenWalls.push(wall(-1,0,(g,m)=>box(g,m,KX1-KT,KX1,0,H,KZ0-KT,KZ1+KT)));
 kitchenWalls.push(wall(0,-1,(g,m)=>box(g,m,KX1,KX0,0,H,KZ0-KT,KZ0)));
 /* ---------- Salle de bain : derrière le mur gauche de la cuisine (en entrant depuis le studio) ----------
-   Profondeur 1,02 m, même largeur que la cuisine. Porte coulissante de 60 cm au milieu du mur.
+   Profondeur 1,02 m, même largeur que la cuisine. Porte coulissante de 60 cm : à gauche en entrant,
+   un mur de 70 cm va jusqu'à la paroi vitrée de la douche.
    En entrant : douche 100 × 70 cm à gauche (bac blanc, colonne, porte coulissante en verre),
    WC suspendu blanc en face à droite, lave-main 30 × 30 cm dans l'angle à droite (meuble rouge, lavabo blanc).
    Deux spots au plafond. */
 const SBZ0=KZ1+KT,SBZ1=SBZ0+1.02,SBX0=KX1,SBX1=KX0;
-const BDW=0.60,BDC=(SBX0+SBX1)/2,BDX0=BDC-BDW/2,BDX1=BDC+BDW/2,BDH=2.04;
+const SHW=0.70;   // largeur de la douche = mur de 70 cm à gauche de la porte en entrant
+const BDW=0.60,BDX1=SBX1-SHW,BDX0=BDX1-BDW,BDH=2.04,SBC=(SBX0+SBX1)/2;
 kitchenWalls.push(wall(0,1,(g,m)=>{
   box(g,m,KX1,BDX0,0,H,KZ1,KZ1+KT);box(g,m,BDX1,KX0,0,H,KZ1,KZ1+KT);box(g,m,BDX0,BDX1,BDH,H,KZ1,KZ1+KT);
 }));
@@ -728,17 +754,18 @@ let bathDoorG,bathDoorItem,showerItem;
   // seuil de la porte
   box(kitchenG,M.frame,BDX0,BDX1,0,0.006,KZ1,SBZ0,false);
 
-  // porte coulissante (côté cuisine) sur rail ; elle glisse vers la droite en regardant la porte
-  box(kitchenG,M.metal,BDX0-0.52,BDX1+0.04,BDH+0.03,BDH+0.07,KZ1-0.045,KZ1,false);
+  // porte coulissante (côté cuisine) sur rail ; elle glisse devant le mur de 70 cm
+  box(kitchenG,M.metal,BDX0-0.04,BDX1+0.66,BDH+0.03,BDH+0.07,KZ1-0.045,KZ1,false);
   bathDoorG=new THREE.Group();kitchenG.add(bathDoorG);
   box(bathDoorG,M.bathDoor,BDX0-0.03,BDX1+0.03,0.01,BDH+0.02,KZ1-0.038,KZ1-0.008);
-  box(bathDoorG,M.metal,BDX1-0.035,BDX1-0.02,0.95,1.15,KZ1-0.045,KZ1-0.038,false);   // poignée cuvette
-  bathDoorItem={id:'bathdoor',name:'Porte coulissante de la salle de bain',obj:bathDoorG,fixed:true,noRotate:true,info:'60 × 204 cm, coulisse le long du mur (« Ouvrir les portes » l\u2019ouvre)'};
+  box(bathDoorG,M.metal,BDX0+0.02,BDX0+0.035,0.95,1.15,KZ1-0.045,KZ1-0.038,false);   // poignée cuvette
+  bathDoorItem={id:'bathdoor',name:'Porte coulissante de la salle de bain',obj:bathDoorG,fixed:true,noRotate:true,info:'60 × 204 cm, coulisse le long du mur (clique dessus pour l\u2019ouvrir ou la fermer)'};
   bathDoorG.userData.item=bathDoorItem;
+  markOpenable(openable('bath',e=>{bathDoorG.position.x=0.63*e;},()=>[bathDoorG]),bathDoorG);
 
   // douche 100 × 70 cm, dans l'angle à gauche en entrant (contre le mur du côté du studio et le mur du fond)
   const showerG=new THREE.Group();kitchenG.add(showerG);
-  const SX0=SBX1-0.70,SZ0=SBZ1-1.00,SZ1=SBZ1;
+  const SX0=SBX1-SHW,SZ0=SBZ1-1.00,SZ1=SBZ1;
   box(showerG,M.ceramic,SX0,SBX1,0,0.05,SZ0,SZ1);
   box(showerG,M.chrome,SBX1-0.40,SBX1-0.30,0.051,0.053,(SZ0+SZ1)/2-0.05,(SZ0+SZ1)/2+0.05,false);   // bonde
   // colonne de douche contre le mur
@@ -748,18 +775,23 @@ let bathDoorG,bathDoorItem,showerItem;
   const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.011,0.011,0.30,10),M.chrome);arm.rotation.z=Math.PI/2;arm.position.set(SBX1-0.20,2.08,cz);showerG.add(arm);
   cyl(showerG,M.chrome,SBX1-0.33,2.05,2.07,cz,0.12);   // pomme de douche
   cyl(showerG,M.chrome,SBX1-0.12,1.35,1.55,cz-0.14,0.012);   // douchette
-  // porte coulissante en verre (deux vantaux) et ses montants
-  const gx=SX0+0.012;
-  box(showerG,M.showerGlass,gx,gx+0.008,0.06,1.98,SZ0+0.03,SZ0+0.54,false);
-  box(showerG,M.showerGlass,gx+0.025,gx+0.033,0.06,1.98,SZ1-0.54,SZ1-0.03,false);
+  // paroi vitrée : partie fixe de 40 cm au fond, porte de 60 cm côté entrée en 2 vantaux de 30 cm
+  // qui coulissent l'un derrière l'autre devant la partie fixe
+  const gx=SX0+0.008,DZ=SZ0+0.60;
+  box(showerG,M.showerGlass,gx+0.034,gx+0.042,0.07,1.98,DZ-0.02,SZ1-0.025,false);   // partie fixe
+  box(showerG,M.showerFrame,gx+0.030,gx+0.046,0.07,1.98,DZ-0.03,DZ-0.015,false);
+  const leafA=new THREE.Group(),leafB=new THREE.Group();showerG.add(leafA,leafB);
+  box(leafA,M.showerGlass,gx,gx+0.008,0.075,1.975,SZ0+0.025,SZ0+0.32,false);
+  box(leafA,M.showerFrame,gx-0.004,gx+0.012,0.075,1.975,SZ0+0.025,SZ0+0.045,false);
+  box(leafA,M.showerFrame,gx-0.02,gx-0.004,0.95,1.25,SZ0+0.05,SZ0+0.065,false);   // poignée
+  box(leafB,M.showerGlass,gx+0.017,gx+0.025,0.075,1.975,SZ0+0.29,DZ,false);
+  box(leafB,M.showerFrame,gx+0.013,gx+0.029,0.075,1.975,SZ0+0.29,SZ0+0.31,false);
   box(showerG,M.showerFrame,SX0,SX0+0.05,1.98,2.02,SZ0,SZ1,false);   // rail haut
   box(showerG,M.showerFrame,SX0,SX0+0.05,0.05,0.07,SZ0,SZ1,false);   // rail bas
   box(showerG,M.showerFrame,SX0,SX0+0.05,0.05,2.02,SZ0,SZ0+0.025,false);   // montants muraux
   box(showerG,M.showerFrame,SX0,SX0+0.05,0.05,2.02,SZ1-0.025,SZ1,false);
-  box(showerG,M.showerFrame,gx-0.004,gx+0.012,0.06,1.98,SZ0+0.52,SZ0+0.545,false);   // montants des vantaux
-  box(showerG,M.showerFrame,gx+0.021,gx+0.037,0.06,1.98,SZ1-0.545,SZ1-0.52,false);
-  box(showerG,M.showerFrame,gx-0.02,gx-0.004,0.95,1.25,SZ0+0.50,SZ0+0.515,false);   // poignée
-  showerItem={id:'shower',name:'Douche',obj:showerG,fixed:true,noRotate:true,info:'100 × 70 cm, bac blanc, colonne de douche et porte coulissante en verre'};
+  markOpenable(openable('shower',e=>{leafA.position.z=0.56*e;leafB.position.z=0.28*e;},()=>[leafA,leafB]),leafA,leafB);
+  showerItem={id:'shower',name:'Douche',obj:showerG,fixed:true,noRotate:true,info:'100 × 70 cm, bac blanc, colonne de douche, porte coulissante en verre de 2 × 30 cm (clique sur la porte pour l\u2019ouvrir)'};
   showerG.userData.item=showerItem;
 
   // WC suspendu blanc, en face de la porte, à droite
@@ -782,7 +814,7 @@ let bathDoorG,bathDoorItem,showerItem;
   const spout=new THREE.Mesh(new THREE.CylinderGeometry(0.009,0.009,0.10,10),M.chrome);spout.rotation.set(-Math.PI/4,0,Math.PI/4);spout.position.set(lx0+0.085,0.97,lz0+0.085);kitchenG.add(spout);
 
   // deux spots au plafond
-  [BDC-0.40,BDC+0.40].forEach(x=>{
+  [SBC-0.40,SBC+0.40].forEach(x=>{
     const z=(SBZ0+SBZ1)/2;
     box(kitchenG,M.frame,x-0.045,x+0.045,H-0.008,H,z-0.045,z+0.045,false);
     const lens=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,0.004,20),M.bathSpotLens);lens.position.set(x,H-0.01,z);kitchenG.add(lens);
@@ -869,6 +901,7 @@ function addDecor(id,name,obj,info){
   back.rotation.y=Math.PI/2;back.position.set(X1-0.05,1.2,(Z0+Z1)/2);gardenG.add(back);gardenBack=back;
 }
 const mainDoorP=hinge(leaf({w:0.79,h:2.02}),doorX1-0.005,0.01,D+0.03,Math.PI,Math.PI/2);
+markOpenable(openable('main',swing([mainDoorP]),()=>[mainDoorP]),mainDoorP);
 
 /* ---------- Option : étagères encastrées à la place de la porte principale (niche de 50 cm) ---------- */
 // Encastrée dans la baie de la porte (0,80 × 2,04 m), façade au nu du mur, caisson de 50 cm derrière.
@@ -904,8 +937,12 @@ const mainCup=new THREE.Group();scene.add(mainCup);
   box(mainCup,M.frame,x0-0.06,x1+0.06,CH,CH+0.06,D-0.015,D);
 }
 mainCup.visible=false;
-[hinge(leaf({w:0.495,h:1.21,t:0.022,mat:M.armWood,halfGlass:true,handleY:0.54}),0.83,0.03,D+0.012,0,Math.PI/2-0.1),
- hinge(leaf({w:0.495,h:1.21,t:0.022,mat:M.armWood,halfGlass:true,handleY:0.54}),1.83,0.03,D+0.012,Math.PI,Math.PI/2+0.1)].forEach(p=>{scene.remove(p);arm.add(p);});
+{
+  const armDoors=[hinge(leaf({w:0.495,h:1.21,t:0.022,mat:M.armWood,halfGlass:true,handleY:0.54}),0.83,0.03,D+0.012,0,Math.PI/2-0.1),
+    hinge(leaf({w:0.495,h:1.21,t:0.022,mat:M.armWood,halfGlass:true,handleY:0.54}),1.83,0.03,D+0.012,Math.PI,Math.PI/2+0.1)];
+  armDoors.forEach(p=>{scene.remove(p);arm.add(p);});
+  markOpenable(openable('arm',swing(armDoors),()=>armDoors),...armDoors);
+}
 // la petite armoire se sélectionne (pour sa couleur) mais ne se déplace pas
 const armItem={id:'arm',name:'Petite armoire encastrée',obj:arm,fixed:true,info:'112 × 30 cm, hauteur 127 cm, dans le mur'};
 arm.userData.item=armItem;
@@ -1074,7 +1111,7 @@ bedItem.wallSnap=true;
 
 // Ouvertures et zones à laisser libres, par mur (le lit ne peut que les signaler)
 let entryCup=false;
-let bedT=1,bedTarget=1,doorT=0,doorTarget=0;   // lit monté (1) / portes fermées (0)
+let bedT=1,bedTarget=1;   // lit monté (1)
 const OPEN={
   back:[],
   left:[[0.48,1.48,'la porte-fenêtre'],[2.64,3.64,'la porte cuisine']],
@@ -1138,6 +1175,10 @@ const ward=new THREE.Group();
 const wardSize={w:0.90,d:0.55,h:2.10};
 const wardDoors=[];
 let wardDrawer=null,wardDrawerTravel=0.3;
+const wardOpen=openable('ward',e=>{
+  for(const d of wardDoors)d.p.rotation.y=d.closed+(d.open-d.closed)*e;
+  if(wardDrawer)wardDrawer.position.z=wardDrawerTravel*e;
+},()=>[...wardDoors.map(d=>d.p),wardDrawer].filter(Boolean));
 function buildWardrobe(){
   while(ward.children.length){const c=ward.children.pop();c.traverse(m=>{m.geometry&&m.geometry.dispose();if(m.getRenderTarget)m.getRenderTarget().dispose();});}
   wardDoors.length=0;
@@ -1166,7 +1207,7 @@ function buildWardrobe(){
   box(ward,M.rustic,-hw+ST,hw-ST,PL,dy0,fz0,fz1);
   box(ward,M.rustic,-hw+ST,hw-ST,dy1,doorY0,fz0,fz1);
   box(ward,M.rusticIn,-hw+S,hw-S,dy1+0.01,doorY0,-hd+0.015,fz0);
-  wardDrawer=new THREE.Group();ward.add(wardDrawer);
+  wardDrawer=new THREE.Group();ward.add(wardDrawer);wardDrawer.userData.openable=wardOpen;
   const dxw=(hw-ST)-0.004,ddep=Math.max(0.2,d-0.10);
   box(wardDrawer,M.rustic,-dxw,dxw,dy0+0.004,dy1-0.004,hd-0.03,hd-0.005);            // façade
   box(wardDrawer,M.rustic,-dxw+0.03,dxw-0.03,dy0+0.03,dy1-0.03,hd-0.005,hd+0.005);  // panneau en relief
@@ -1239,7 +1280,7 @@ function buildWardrobe(){
     p.add(g);
     const closed=left?0:Math.PI,open=left?-Math.PI/2*0.95:Math.PI*1.5-0.08;
     p.rotation.y=closed;ward.add(p);
-    wardDoors.push({p,closed,open});
+    wardDoors.push({p,closed,open});p.userData.openable=wardOpen;
   }
 }
 buildWardrobe();
@@ -1722,7 +1763,7 @@ document.querySelectorAll('[data-show]').forEach(b=>b.addEventListener('click',(
   const k=b.dataset.show;showState[k]=!showState[k];applyShow();save();
 }));
 function getState(){
-  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:doorTarget,view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,dim:Object.assign({},dim),items:{}};
+  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,dim:Object.assign({},dim),items:{}};
   items.forEach(it=>o.items[it.id]={x:it.obj.position.x,z:it.obj.position.z,r:it.obj.rotation.y});
   return JSON.parse(JSON.stringify(o));
 }
@@ -1739,14 +1780,16 @@ let save=function(){
 function syncBedDoorBtns(){
   const bb=document.getElementById('bedBtn'),db=document.getElementById('doorBtn');
   bb.textContent=bedTarget?'Descendre le lit':'Monter le lit';bb.setAttribute('aria-pressed',String(!!bedTarget));
-  db.textContent=doorTarget?'Fermer les portes':'Ouvrir les portes';db.setAttribute('aria-pressed',String(!!doorTarget));
+  const allOpen=openables.every(o=>o.target>0.5);
+  db.textContent=allOpen?'Fermer les portes':'Ouvrir les portes';db.setAttribute('aria-pressed',String(allOpen));
 }
 applyDefaults();
 const DEFAULT_STATE=getState();
 function loadInto(s){
   if(!s)return;
   if(s.bedUp===0||s.bedUp===1){bedTarget=bedT=s.bedUp;}
-  if(s.doorsOpen===0||s.doorsOpen===1){doorTarget=doorT=s.doorsOpen;}
+  if(s.doorsOpen===0||s.doorsOpen===1)openables.forEach(o=>{o.target=o.t=s.doorsOpen;});
+  else if(s.doorsOpen&&typeof s.doorsOpen==='object')openables.forEach(o=>{const v=s.doorsOpen[o.id];if(v===0||v===1)o.target=o.t=v;});
   if(s.view&&Array.isArray(s.view.cam)&&Array.isArray(s.view.tgt)){camera.position.fromArray(s.view.cam);controls.target.fromArray(s.view.tgt);controls.update();}
   if(s&&s.ward&&s.ward.w){Object.assign(wardSize,s.ward);buildWardrobe();wardInfo();}
   if(s&&s.sofa&&s.sofa.w){Object.assign(sofaSize,s.sofa);buildSofa();sofaInfo();}
@@ -1822,7 +1865,7 @@ bedBtn.addEventListener('click',()=>{
   bedTarget=bedTarget>0.5?0:1;syncBedDoorBtns();save();
 });
 doorBtn.addEventListener('click',()=>{
-  doorTarget=doorTarget>0.5?0:1;syncBedDoorBtns();save();
+  const open=openables.every(o=>o.target>0.5)?0:1;openables.forEach(o=>o.target=open);syncBedDoorBtns();save();
 });
 syncBedDoorBtns();
 // la vue (angle et zoom) est aussi mémorisée, une fois la caméra immobile
@@ -2222,7 +2265,6 @@ const clock=new THREE.Clock(),v=new THREE.Vector2();
 function frame(){
   const dt=Math.min(clock.getDelta(),0.05);
   bedT=step(bedT,bedTarget,dt,4.0);
-  doorT=step(doorT,doorTarget,dt,1.1);
   tableT=step(tableT,tableTarget,dt,0.9);
   const sbPrev=sofaBackT;sofaBackT=step(sofaBackT,sofaBackTarget,dt,1.0);
   if(sofaBack)sofaBack.rotation.x=-Math.PI/2*ease(sofaBackT);
@@ -2233,11 +2275,7 @@ function frame(){
   bedGroup.position.y=LOW+(HIGH-LOW)*ease(bedT);
   bedLegs.visible=bedT<0.02;
 
-  const e=ease(doorT);
-  for(const d of doors)d.p.rotation.y=d.closed+(d.open-d.closed)*e;
-  if(bathDoorG)bathDoorG.position.x=-0.49*e;   // porte coulissante de la salle de bain
-  for(const d of wardDoors)d.p.rotation.y=d.closed+(d.open-d.closed)*e;
-  if(wardDrawer)wardDrawer.position.z=wardDrawerTravel*e;
+  for(const o of openables){o.t=step(o.t,o.target,dt,o.speed);o.apply(ease(o.t));}
 
   poseTable(tableT);
 
