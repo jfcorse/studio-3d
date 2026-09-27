@@ -155,6 +155,11 @@ button.ghost{border-color:var(--line);color:var(--muted)}
     <button data-show="kitchen" aria-pressed="true">Cuisine voisine</button>
   </div>
   <h2>Mobilier</h2>
+  <div class="actions" style="margin:0 0 10px">
+    <button id="freezeBtn" aria-pressed="false">Figer les éléments</button>
+    <button id="delBtn" disabled>Supprimer l'élément</button>
+    <button id="restoreBtn" class="ghost" hidden>Remettre les éléments supprimés</button>
+  </div>
   <p class="sel" id="sel">Clique sur un meuble pour le sélectionner.</p>
   <div id="bedColors" class="colorset">
     <div class="actions" style="margin:0 0 10px"><button id="pillowBtn">Oreillers à gauche</button></div>
@@ -207,7 +212,7 @@ button.ghost{border-color:var(--line);color:var(--muted)}
     <button id="randBtn">Proposer un agencement</button>
   </div>
   <p class="note" id="layoutNote" style="margin:10px 0 0" hidden></p>
-  <p class="hint">Glisse un meuble pour le déplacer, touche R pour le pivoter. Le lit et la table se déplacent aussi mais restent toujours fixés au mur le plus proche. Glisser dans le vide fait tourner la vue, molette ou pincer pour zoomer. La disposition est gardée dans ce navigateur.</p>
+  <p class="hint">Glisse un meuble pour le déplacer, touche R pour le pivoter, touche Suppr pour supprimer un élément du décor (arbre, plante, chaise…). Le lit et la table se déplacent aussi mais restent toujours fixés au mur le plus proche. Glisser dans le vide fait tourner la vue, molette ou pincer pour zoomer. La disposition est gardée dans ce navigateur.</p>
 </div>
 <div class="error" id="err">La vue 3D n'a pas pu se charger. Vérifie que WebGL est activé dans le navigateur.</div>
 
@@ -259,14 +264,17 @@ const camera=new THREE.PerspectiveCamera(42,1,0.05,100);
 /* ---------- Déplacement des meubles (enregistré avant OrbitControls pour passer en premier) ---------- */
 const ray=new THREE.Raycaster(),ndc=new THREE.Vector2(),hitP=new THREE.Vector3();
 const floorPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
-let drag=null,down=null,selected=null;
+let drag=null,down=null,selected=null,frozen=false;
+const removed=new Set();   // identifiants des éléments supprimés (décor, plante, chaises)
 function setRay(e){
   const r=canvas.getBoundingClientRect();
   ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
   ray.setFromCamera(ndc,camera);
 }
 function pickItem(){
+  if(frozen)return null;   // éléments figés : un clic ne sélectionne plus rien, la vue tourne librement
   const targets=items.filter(i=>i.obj.visible).map(i=>i.obj);targets.push(arm);
+  if(gardenG.visible)decor.forEach(d=>{if(d.obj.visible)targets.push(d.obj);});
   walls.forEach(w=>{if(w.op>0.98)targets.push(w.g);});
   const hits=ray.intersectObjects(targets,true);
   if(!hits.length)return null;
@@ -281,7 +289,7 @@ canvas.addEventListener('pointerdown',e=>{
   const it=pickItem();
   if(!it)return;
   select(it);
-  if(it.fixed)return;   // non déplaçable : la vue peut tourner normalement
+  if(it.fixed){down=null;return;}   // non déplaçable : reste sélectionné au relâchement, la vue peut tourner normalement
   ray.ray.intersectPlane(floorPlane,hitP);
   drag={it,dx:it.obj.position.x-hitP.x,dz:it.obj.position.z-hitP.z};
   controls.enabled=false;
@@ -609,6 +617,12 @@ kitchenWalls.push(wall(0,1,(g,m)=>box(g,m,KX1,KX0,0,H,KZ1,KZ1+KT)));
 // Petit jardin corse à l'extérieur du mur de façade : terrasse en dalles, pelouse, olivier,
 // cyprès, lauriers et bougainvillier, lavandes, muret en pierre sèche et montagnes au loin.
 const gardenG=new THREE.Group();scene.add(gardenG);
+// Éléments du décor : sélectionnables et supprimables, mais ni déplaçables ni pivotables.
+const decor=[];
+function addDecor(id,name,obj,info){
+  const d={id,name,obj,info:info||'élément du jardin',deco:true,fixed:true,noRotate:true};
+  obj.userData.item=d;gardenG.add(obj);decor.push(d);return d;
+}
 {
   const X0=-TL,X1=-4.2,Z0=-1.0,Z1=KZ0-0.22,rg=rng(77);   // s'arrête au mur de la cuisine voisine
   const lam=c=>new THREE.MeshLambertMaterial({color:c});
@@ -625,12 +639,13 @@ const gardenG=new THREE.Group();scene.add(gardenG);
     box(gardenG,stoneM[Math.floor(rg()*3)],x-0.40,x,-0.02,0.0,z,z+0.38,false);
   // muret en pierre sèche au fond du jardin
   const wallM=[lam(0xa8a091),lam(0x968d7e),lam(0xb7ae9e),lam(0x8a8173)];
+  const muret=new THREE.Group();addDecor('muret','Muret en pierre sèche',muret);
   for(let z=Z0;z<Z1-0.01;z+=0.26)for(let y=0;y<0.62;y+=0.16){
     const off=(Math.round(y/0.16)%2)*0.13;const zz=Math.min(Z1,z+off);if(zz>=Z1-0.02)continue;
-    box(gardenG,wallM[Math.floor(rg()*4)],X1+0.02,X1+0.36,y,y+0.15,zz,Math.min(Z1,zz+0.25));
+    box(muret,wallM[Math.floor(rg()*4)],X1+0.02,X1+0.36,y,y+0.15,zz,Math.min(Z1,zz+0.25));
   }
   // olivier
-  const olive=new THREE.Group();olive.position.set(-2.55,0,0.05);gardenG.add(olive);
+  const olive=new THREE.Group();olive.position.set(-2.55,0,0.05);addDecor('olive','Olivier',olive);
   const trunkM=lam(0x6b5a48),oliveM=lam(0x8c9a6b),oliveM2=lam(0x7b8a5e);
   const t1=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.13,1.3,8),trunkM);t1.position.set(0,0.65,0);t1.rotation.z=0.12;t1.castShadow=true;olive.add(t1);
   const t2=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.07,0.7,7),trunkM);t2.position.set(0.12,1.35,0.08);t2.rotation.set(0.3,0,-0.4);t2.castShadow=true;olive.add(t2);
@@ -638,22 +653,23 @@ const gardenG=new THREE.Group();scene.add(gardenG);
     const m=new THREE.Mesh(new THREE.IcosahedronGeometry(r,1),i%2?oliveM:oliveM2);m.position.set(x,y,z);m.scale.y=0.7;m.castShadow=true;olive.add(m);
   });
   // cyprès
-  const cyp=new THREE.Mesh(new THREE.ConeGeometry(0.34,3.0,10),lam(0x3e5a3a));cyp.position.set(-3.55,1.6,1.62);cyp.castShadow=true;gardenG.add(cyp);
-  const cyp2=new THREE.Mesh(new THREE.ConeGeometry(0.28,2.4,10),lam(0x46633f));cyp2.position.set(-3.6,1.3,-0.6);cyp2.castShadow=true;gardenG.add(cyp2);
+  const cyp=new THREE.Mesh(new THREE.ConeGeometry(0.34,3.0,10),lam(0x3e5a3a));cyp.position.set(-3.55,1.6,1.62);cyp.castShadow=true;addDecor('cypress1','Grand cyprès',cyp);
+  const cyp2=new THREE.Mesh(new THREE.ConeGeometry(0.28,2.4,10),lam(0x46633f));cyp2.position.set(-3.6,1.3,-0.6);cyp2.castShadow=true;addDecor('cypress2','Petit cyprès',cyp2);
   // bougainvillier, lauriers-roses et buissons
-  [[-3.4,0.5,0.6,0.42,0xc2458a],[-3.25,0.45,1.15,0.36,0xd0579a],[-3.5,0.4,0.05,0.34,0xe39bb4],[-1.9,0.3,-0.55,0.3,0x6f8f4e],[-2.9,0.35,1.55,0.3,0xe7a9c0],[-1.7,0.28,1.72,0.2,0x7a9a52]].forEach(([x,y,z,r,c])=>{
-    const m=new THREE.Mesh(new THREE.IcosahedronGeometry(r,1),lam(c));m.position.set(x,y,z);m.scale.y=0.85;m.castShadow=true;gardenG.add(m);
+  [[-3.4,0.5,0.6,0.42,0xc2458a,'bush1','Bougainvillier'],[-3.25,0.45,1.15,0.36,0xd0579a,'bush2','Bougainvillier'],[-3.5,0.4,0.05,0.34,0xe39bb4,'bush3','Laurier-rose'],[-1.9,0.3,-0.55,0.3,0x6f8f4e,'bush4','Buisson'],[-2.9,0.35,1.55,0.3,0xe7a9c0,'bush5','Laurier-rose'],[-1.7,0.28,1.72,0.2,0x7a9a52,'bush6','Petit buisson']].forEach(([x,y,z,r,c,id,name])=>{
+    const m=new THREE.Mesh(new THREE.IcosahedronGeometry(r,1),lam(c));m.position.set(x,y,z);m.scale.y=0.85;m.castShadow=true;addDecor(id,name,m);
   });
   // rangée de lavandes le long de la terrasse
-  const lavM=lam(0x8f7fc0),lavG=lam(0x7d8f6a);
+  const lavM=lam(0x8f7fc0),lavG=lam(0x7d8f6a),lav=new THREE.Group();addDecor('lavender','Rangée de lavandes',lav);
   for(let z=0.35;z<1.65;z+=0.26){
-    const b=new THREE.Mesh(new THREE.SphereGeometry(0.13,10,8),lavG);b.position.set(-2.05,0.1,z);b.scale.y=0.7;gardenG.add(b);
-    const f=new THREE.Mesh(new THREE.SphereGeometry(0.12,10,8),lavM);f.position.set(-2.05,0.24,z);f.scale.y=0.55;gardenG.add(f);
+    const b=new THREE.Mesh(new THREE.SphereGeometry(0.13,10,8),lavG);b.position.set(-2.05,0.1,z);b.scale.y=0.7;lav.add(b);
+    const f=new THREE.Mesh(new THREE.SphereGeometry(0.12,10,8),lavM);f.position.set(-2.05,0.24,z);f.scale.y=0.55;lav.add(f);
   }
   // pot en terre cuite avec citronnier près de la terrasse
-  const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.15,0.35,14),lam(0xb8674a));pot.position.set(-1.45,0.17,1.85);pot.castShadow=true;gardenG.add(pot);
-  const lem=new THREE.Mesh(new THREE.IcosahedronGeometry(0.3,1),lam(0x55793f));lem.position.set(-1.45,0.75,1.85);lem.castShadow=true;gardenG.add(lem);
-  [[0.15,0.8,0.2],[-0.18,0.7,0.1],[0.05,0.9,-0.22]].forEach(([dx,y,dz])=>{const l=new THREE.Mesh(new THREE.SphereGeometry(0.04,8,6),lam(0xf2d23c));l.position.set(-1.45+dx,y,1.85+dz);gardenG.add(l);});
+  const lemonTree=new THREE.Group();addDecor('lemon','Citronnier en pot',lemonTree);
+  const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.15,0.35,14),lam(0xb8674a));pot.position.set(-1.45,0.17,1.85);pot.castShadow=true;lemonTree.add(pot);
+  const lem=new THREE.Mesh(new THREE.IcosahedronGeometry(0.3,1),lam(0x55793f));lem.position.set(-1.45,0.75,1.85);lem.castShadow=true;lemonTree.add(lem);
+  [[0.15,0.8,0.2],[-0.18,0.7,0.1],[0.05,0.9,-0.22]].forEach(([dx,y,dz])=>{const l=new THREE.Mesh(new THREE.SphereGeometry(0.04,8,6),lam(0xf2d23c));l.position.set(-1.45+dx,y,1.85+dz);lemonTree.add(l);});
   // toile de fond : ciel, montagnes et maquis
   const bc=document.createElement('canvas');bc.width=1024;bc.height=512;const bx=bc.getContext('2d');
   const sky=bx.createLinearGradient(0,0,0,512);sky.addColorStop(0,'#8fbde3');sky.addColorStop(0.65,'#dcebf3');sky.addColorStop(1,'#eef3f0');
@@ -1320,12 +1336,32 @@ function clampItem(it){
 }
 const selBox=new THREE.BoxHelper(undefined,0x2f8f93);selBox.visible=false;scene.add(selBox);
 const selEl=document.getElementById('sel'),rotBtn=document.getElementById('rotBtn'),rot15Btn=document.getElementById('rot15Btn');
+const delBtn=document.getElementById('delBtn'),restoreBtn=document.getElementById('restoreBtn'),freezeBtn=document.getElementById('freezeBtn');
+// Supprimables : le décor du jardin, la grande plante et les chaises (les meubles se masquent avec « Afficher »).
+const isRemovable=it=>!!it.deco||it.id==='plant'||it.id.startsWith('chair');
+function removeSelected(){
+  if(!selected||!isRemovable(selected))return;
+  const name=selected.name;removed.add(selected.id);select(null);applyShow();save();
+  selEl.innerHTML='<strong>'+name+'</strong> supprimé. « Remettre les éléments supprimés » le fait revenir.';
+}
+delBtn.addEventListener('click',removeSelected);
+restoreBtn.addEventListener('click',()=>{removed.clear();applyShow();save();});
+function syncFreeze(){
+  freezeBtn.textContent=frozen?'Défiger les éléments':'Figer les éléments';
+  freezeBtn.setAttribute('aria-pressed',String(frozen));
+  if(frozen||!selected)select(null);
+}
+freezeBtn.addEventListener('click',()=>{frozen=!frozen;syncFreeze();save();});
+window.addEventListener('keydown',e=>{
+  if((e.key==='Delete'||e.key==='Backspace')&&selected&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();removeSelected();}
+});
 function select(it){
   selected=it;
   selBox.visible=!!it;
   if(it){selBox.setFromObject(it.obj);showSel(it);}
-  else{selEl.textContent='Clique sur un meuble pour le sélectionner.';document.getElementById('sofaSizes').classList.remove('on');document.getElementById('wardSizes').classList.remove('on');document.getElementById('wardColors').classList.remove('on');document.getElementById('bedColors').classList.remove('on');document.getElementById('armColors').classList.remove('on');['tableColors','chairColors','fanSizes','sofaColors'].forEach(i=>document.getElementById(i).classList.remove('on'));document.getElementById('tableSizes').classList.remove('on');document.getElementById('tableNote').hidden=true;}
+  else{selEl.textContent=frozen?'Éléments figés : plus rien n\u2019est sélectionnable. Clique sur « Défiger les éléments » pour les modifier.':'Clique sur un meuble pour le sélectionner.';document.getElementById('sofaSizes').classList.remove('on');document.getElementById('wardSizes').classList.remove('on');document.getElementById('wardColors').classList.remove('on');document.getElementById('bedColors').classList.remove('on');document.getElementById('armColors').classList.remove('on');['tableColors','chairColors','fanSizes','sofaColors'].forEach(i=>document.getElementById(i).classList.remove('on'));document.getElementById('tableSizes').classList.remove('on');document.getElementById('tableNote').hidden=true;}
   rotBtn.disabled=rot15Btn.disabled=!it||!!it.wallSnap||!!it.fixed||!!it.noRotate;
+  delBtn.disabled=!it||!isRemovable(it);
 }
 function showSel(it){
   document.getElementById('sofaSizes').classList.toggle('on',it===sofaItem);
@@ -1417,12 +1453,15 @@ function groupItems(k){
 }
 function applyShow(){
   for(const k in showState){
-    groupItems(k).forEach(it=>{it.obj.visible=showState[k];if(!showState[k]&&selected===it)select(null);});
+    groupItems(k).forEach(it=>{it.obj.visible=showState[k]&&!removed.has(it.id);if(!it.obj.visible&&selected===it)select(null);});
     if(k==='garden')gardenG.visible=showState[k];
     if(k==='kitchen'){kitchenG.visible=showState[k];kitchenWalls.forEach(g=>g.visible=showState[k]);}
     const b=document.querySelector('[data-show="'+k+'"]');
     b.setAttribute('aria-pressed',String(showState[k]));
   }
+  decor.forEach(d=>{d.obj.visible=!removed.has(d.id);if(!d.obj.visible&&selected===d)select(null);});
+  const nRemoved=[...removed].filter(id=>decor.some(d=>d.id===id)||items.some(i=>i.id===id&&isRemovable(i))).length;
+  restoreBtn.hidden=!nRemoved;restoreBtn.textContent='Remettre les éléments supprimés ('+nRemoved+')';
   document.getElementById('bedBtn').disabled=!showState.bed;
   document.getElementById('tableBtn').disabled=!showState.table;
   document.getElementById('sofaBackBtn').disabled=!showState.sofa;
@@ -1434,7 +1473,7 @@ document.querySelectorAll('[data-show]').forEach(b=>b.addEventListener('click',(
   const k=b.dataset.show;showState[k]=!showState[k];applyShow();save();
 }));
 function getState(){
-  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:doorTarget,view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,ward:wardSize,show:showState,items:{}};
+  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:doorTarget,view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,ward:wardSize,show:showState,removed:[...removed],frozen,items:{}};
   items.forEach(it=>o.items[it.id]={x:it.obj.position.x,z:it.obj.position.z,r:it.obj.rotation.y});
   return JSON.parse(JSON.stringify(o));
 }
@@ -1465,6 +1504,8 @@ function loadInto(s){
   if(s&&s.table&&s.table.w){Object.assign(tableSize,s.table);buildTable();tableInfo();}
   if(s&&s.tableOpen===0){tableTarget=0;tableT=0;}
   if(s&&s.show)Object.assign(showState,s.show);
+  if(s&&Array.isArray(s.removed)){removed.clear();s.removed.forEach(id=>removed.add(id));}
+  if(s&&typeof s.frozen==='boolean')frozen=s.frozen;
   if(s&&s.entryCup)entryCup=true;
   if(s&&s.floor&&s.floor.color)Object.assign(floorState,s.floor);
   if(s&&s.wardColor)wardColor=s.wardColor;
@@ -1487,7 +1528,7 @@ function loadInto(s){
 }
 try{loadInto(JSON.parse(localStorage.getItem(KEY)||'null'));}catch(e){}
 
-applyShow();
+applyShow();syncFreeze();
 applyFloor();applyWardColor();Object.keys(colors).forEach(applyColor);applyPillows();buildSpots();applyFan();
 document.getElementById('spotBtn').addEventListener('click',()=>{spotsOn=!spotsOn;applySpots();save();});
 document.getElementById('spotCountBtn').addEventListener('click',()=>{spotCount=spotCount===4?6:spotCount===6?8:4;buildSpots();save();});
@@ -1550,6 +1591,7 @@ function applyPlan(state){
   buildWardrobe();wardInfo();buildSofa();sofaInfo();buildTable();poseTable(tableT);tableInfo();buildFan();fanItem.w=fanItem.d=fanSize.d;
   if(s.sofaBack===1)sofaBack.rotation.x=-Math.PI/2;
   applyShow();applyFloor();applyWardColor();Object.keys(colors).forEach(applyColor);applyPillows();buildSpots();applyFan();applyFanLamp();applyBedSpots();applyAmbiance();applyEntry();
+  syncFreeze();
   syncBedDoorBtns();syncTableBtn();syncSofaInputs();syncTableInputs();syncWardInputs();syncSofaBackBtn();fanIn.value=Math.round(fanSize.d*100);
   items.forEach(it=>clampItem(it));
   select(null);save();
