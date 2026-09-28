@@ -1978,8 +1978,30 @@ const plantItem=addItem('plant','Grande plante verte',plant,0.5,0.5,{x:0.30,z:3.
 /* ---------- Mobilier de cuisine — plan de travail (bois clair, plan de travail et évier noirs,
    micro-ondes encastré, lave-vaisselle) et réfrigérateur : UN SEUL bloc déplaçable et pivotable,
    pour que tous les éléments de la cuisine se déplacent ensemble plutôt que un par un. ---------- */
-M.kWood=new THREE.MeshStandardMaterial({map:woodTex('#caa36d'),roughness:0.5});
-M.kTop=new THREE.MeshStandardMaterial({color:0x161616,roughness:0.22});
+// façades en chêne clair naturel (fil droit, sans nœuds), plan de travail noir mat grainé, poignées profilées noires
+function paleOakTex(){
+  const S=512,c=document.createElement('canvas');c.width=c.height=S;
+  const g=c.getContext('2d'),r=rng(31);
+  g.fillStyle='#dcc5a0';g.fillRect(0,0,S,S);
+  for(let i=0;i<220;i++){
+    const x0=r()*S,amp=0.5+r()*2.5,fr=0.004+r()*0.01,ph=r()*6,dark=r()<0.7;
+    g.strokeStyle=dark?`rgba(120,92,60,${0.06+r()*0.16})`:`rgba(250,240,222,${0.08+r()*0.16})`;
+    g.lineWidth=0.5+r()*1.8;g.beginPath();
+    for(let y=0;y<=S;y+=8){const x=x0+Math.sin(y*fr+ph)*amp;y?g.lineTo(x,y):g.moveTo(x,y);}
+    g.stroke();
+  }
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.encoding=THREE.sRGBEncoding;return t;
+}
+function matteBlackTex(){
+  const S=256,c=document.createElement('canvas');c.width=c.height=S;
+  const g=c.getContext('2d'),r=rng(37);
+  g.fillStyle='#262626';g.fillRect(0,0,S,S);
+  for(let i=0;i<5000;i++){const v=28+Math.floor(r()*34);g.fillStyle=`rgb(${v},${v},${v})`;g.fillRect(r()*S,r()*S,1,1);}
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(3,3);t.encoding=THREE.sRGBEncoding;return t;
+}
+M.kWood=new THREE.MeshStandardMaterial({map:paleOakTex(),roughness:0.6});
+M.kTop=new THREE.MeshStandardMaterial({map:matteBlackTex(),roughness:0.85});
+M.kHandle=new THREE.MeshStandardMaterial({color:0x141414,roughness:0.45,metalness:0.4});
 M.kSink=new THREE.MeshStandardMaterial({color:0x0c0c0c,roughness:0.18});
 M.kTap=new THREE.MeshStandardMaterial({color:0x141414,roughness:0.3,metalness:0.7});
 M.kAppliance=new THREE.MeshStandardMaterial({color:0x18181a,roughness:0.32});
@@ -1994,12 +2016,13 @@ let kitchenItem;
   const CW=0.62,CL=1.66,cpx=KX1+CW/2,cpz=KZ0+0.02+CL/2;
   const counter=new THREE.Group();
   const cx0=-CW/2,cx1=CW/2,cz0=-CL/2,cz1=CL/2;
-  // trois segments bas : bois | lave-vaisselle (panneau noir) | évier (bois)
+  // trois segments bas : bois | lave-vaisselle intégré (façade bois) | évier (bois)
   const segA=cz0+0.55,segB=segA+0.55;
   box(counter,M.kWood,cx0,cx1-0.02,0.10,0.88,cz0,segA-0.01);
-  box(counter,M.kAppliance,cx0,cx1-0.02,0.10,0.88,segA,segB-0.01);
-  box(counter,M.kApplianceLine,cx0-0.001,cx1-0.019,0.80,0.82,segA+0.03,segB-0.04,false);
+  box(counter,M.kWood,cx0,cx1-0.02,0.10,0.88,segA,segB-0.01);   // lave-vaisselle intégré, façade bois
   box(counter,M.kWood,cx0,cx1-0.02,0.10,0.88,segB,cz1);
+  // poignées profilées noires en haut des façades basses
+  [[cz0,segA-0.01],[segA,segB-0.01],[segB,cz1]].forEach(([a,b])=>box(counter,M.kHandle,cx1-0.02,cx1-0.006,0.835,0.855,a+0.04,b-0.04,false));
   box(counter,M.dark,cx0,cx1-0.07,0,0.10,cz0,cz1);
   box(counter,M.kTop,cx0,cx1,0.88,0.93,cz0,cz1);
   // évier noir intégré, côté gauche (sous le meuble haut de 60 cm)
@@ -2015,7 +2038,10 @@ let kitchenItem;
   box(counter,M.kAppliance,cx0+0.01,cx0+0.33,UY0,1.85,r0+0.01,r1-0.01);
   box(counter,M.kMicroGlass,cx0+0.33,cx0+0.336,UY0+0.035,1.815,r0+0.05,r1-0.13,false);   // porte vitrée, face à la pièce
   box(counter,M.kApplianceLine,cx0+0.33,cx0+0.338,UY0+0.06,1.79,r1-0.11,r1-0.04,false);   // panneau de commande
-  box(counter,M.kShelfBlack,cx0,cx0+0.25,UY1-0.03,UY1,r1,l0);   // tablette en bois noir, en haut, au niveau du dessus des meubles
+  box(counter,M.kShelfBlack,cx0,cx0+0.25,UY1-0.03,UY1,r1,l0);
+  // poignées profilées noires en bas des portes hautes
+  box(counter,M.kHandle,cx0+0.34,cx0+0.354,UY0+0.012,UY0+0.03,l0+0.04,l1-0.04,false);
+  box(counter,M.kHandle,cx0+0.34,cx0+0.354,1.862,1.88,r0+0.04,r1-0.04,false);   // tablette en bois noir, en haut, au niveau du dessus des meubles
   // réglette lumineuse sous chaque meuble haut, éclairant le plan de travail
   [[r0,r1],[l0,l1]].forEach(([za,zb])=>{
     box(counter,M.kLed,cx0+0.26,cx0+0.30,UY0-0.012,UY0,za+0.04,zb-0.04,false);
