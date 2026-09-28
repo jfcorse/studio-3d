@@ -1169,12 +1169,13 @@ const wcG=new THREE.Group(),basinG=new THREE.Group();   // WC et lave-main, dép
   // WC suspendu blanc, en face de la porte, à droite — déplaçable (enregistré plus bas comme meuble)
   // repère local : centre du WC, dos (plaque de commande) du côté +z
   box(wcG,M.ceramic,-0.17,0.17,0.20,0.40,0.01,0.27);
-  const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.14,0.20,24),M.ceramic);bowl.scale.z=1.25;bowl.position.set(0,0.30,-0.06);bowl.castShadow=true;wcG.add(bowl);
-  const seat=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.025,24),M.ceramic);seat.scale.z=1.25;seat.position.set(0,0.415,-0.06);wcG.add(seat);
+  const bowl=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.14,0.20,24),M.ceramic);bowl.scale.z=1.05;bowl.position.set(0,0.30,-0.03);bowl.castShadow=true;wcG.add(bowl);
+  const seat=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.025,24),M.ceramic);seat.scale.z=1.05;seat.position.set(0,0.415,-0.03);wcG.add(seat);
   box(wcG,M.ceramic,-0.17,0.17,0.40,0.43,0.13,0.25);
   box(wcG,M.ceramic,-0.12,0.12,1.00,1.16,0.258,0.27,false);   // plaque de commande
   box(wcG,M.chromeFix,-0.09,-0.005,1.04,1.12,0.254,0.258,false);
   box(wcG,M.chromeFix,0.005,0.09,1.04,1.12,0.254,0.258,false);
+  wcG.children.forEach(c=>c.position.z-=0.025);   // 36 × 49 cm depuis le mur : repère centré (−24,5 → +24,5 cm)
 
   // lave-main 30 × 30 cm dans l'angle à droite en entrant : meuble rouge, lavabo blanc encastré, robinet — déplaçable
   // repère local : centre du meuble, robinet dans l'angle arrière (−x, −z)
@@ -2010,10 +2011,10 @@ function applySitter(){
   sitterG.visible=sitterOn;
   const b=document.getElementById('sitterBtn');
   b.setAttribute('aria-pressed',String(sitterOn));
-  tip(b,sitterOn?'Enlever la personne assise sur les WC':'Personne assise sur les WC (1,80 m, 100 kg) : genoux à 50 cm et pieds à 66 cm devant le centre du WC, 58 cm de large aux coudes');
+  tip(b,sitterOn?'Enlever la personne assise sur les WC':'Personne assise sur les WC (1,80 m, 100 kg) : genoux à 80 cm et pieds à 91 cm du mur du WC, 58 cm de large aux coudes');
 }
 document.getElementById('sitterBtn').addEventListener('click',()=>{sitterOn=!sitterOn;applySitter();save();});
-const wcItem=addItem('wc','WC suspendu',wcG,0.36,0.54,{x:(SBX0+SBX1-SHW)/2-0.02,z:SBZ1-0.27,r:0},'blanc, avec plaque de commande');
+const wcItem=addItem('wc','WC suspendu',wcG,0.36,0.49,{x:(SBX0+SBX1-SHW)/2-0.02,z:SBZ1-0.245,r:0},'36 × 49 cm depuis le mur, blanc, avec plaque de commande');
 wcItem.bounds=BATH_FREE;
 const basinItem=addItem('basin','Lave-main',basinG,0.30,0.30,{x:SBX0+0.15,z:SBZ0+0.15,r:0},'30 × 30 cm, meuble sous le lavabo blanc encastré, robinet');
 basinItem.bounds=BATH_FREE;
