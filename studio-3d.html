@@ -484,22 +484,22 @@ button.ghost{border-color:var(--line);color:var(--muted)}
 
   <details class="acc" data-acc="fauxceil">
     <summary>Faux plafond</summary>
-    <p class="note" style="margin:0 0 8px">Choisis les pièces qui reçoivent un faux plafond, puis règle sa hauteur au-dessus du sol (plafond d'origine : 2,94 m). Les spots, le plafonnier et le ventilateur descendent avec lui.</p>
+    <p class="note" style="margin:0 0 8px">Choisis les pièces qui reçoivent un faux plafond, puis règle sa hauteur : l'espace entre le plafond d'origine et le faux plafond. La hauteur sous plafond qui reste s'affiche en dessous. Les spots, le plafonnier et le ventilateur descendent avec lui.</p>
     <div class="seg" style="flex-wrap:wrap">
       <button data-fc="studio" aria-pressed="false">Pièce principale</button>
       <button data-fc="kitchen" aria-pressed="false">Cuisine</button>
       <button data-fc="bath" aria-pressed="false">Salle de bain</button>
     </div>
     <div class="sizes on">
-      <label>Pièce principale (cm)<input data-fch="studio" type="number" min="240" max="290" step="1" inputmode="numeric"></label>
-      <label>Cuisine (cm)<input data-fch="kitchen" type="number" min="200" max="290" step="1" inputmode="numeric"></label>
-      <label>Salle de bain (cm)<input data-fch="bath" type="number" min="200" max="290" step="1" inputmode="numeric"></label>
+      <label>Pièce (cm)<input data-fch="studio" type="number" min="4" max="54" step="1" inputmode="numeric"><span data-fcr="studio"></span></label>
+      <label>Cuisine (cm)<input data-fch="kitchen" type="number" min="4" max="94" step="1" inputmode="numeric"><span data-fcr="kitchen"></span></label>
+      <label>Bain (cm)<input data-fch="bath" type="number" min="4" max="94" step="1" inputmode="numeric"><span data-fcr="bath"></span></label>
     </div>
     <p class="swlabel">Lit élévateur</p>
     <div class="actions" style="margin:0">
       <button id="bedBoxBtn" aria-pressed="false">Coffrage autour du lit</button>
     </div>
-    <p class="note" style="margin:8px 0 0">Le coffrage entoure le lit du plafond (ou du faux plafond) jusqu'à 2,20 m : lit monté, le matelas et le sommier sont cachés, seul le dessous du lit reste visible.</p>
+    <p class="note" style="margin:8px 0 0">Le lit monté s'arrête sous le faux plafond. Le coffrage l'entoure du plafond (ou du faux plafond) jusqu'au dessous du lit monté : le matelas et le sommier sont cachés, seul le dessous du lit reste visible.</p>
   </details>
 </div>
 <div class="walkhelp" id="walkHelp" hidden><label class="recul">Recul <input type="range" id="walkFov" min="0" max="100" step="5" value="0" aria-label="Recul, en pourcentage"> <span id="walkFovTxt">0 %</span></label><br>Promenade à hauteur d'yeux (personne de <span id="walkHTxt">1,75 m</span>) — <strong>↑ ↓</strong> avancer / reculer · <strong>← →</strong> tourner · <strong>Maj</strong> + flèches : pas de côté · glisser la souris : regarder · <strong>Échap</strong> : quitter</div>
@@ -1918,6 +1918,7 @@ wardInfo();
 const fauxCeil={studio:{on:false,h:2.50},kitchen:{on:false,h:2.40},bath:{on:false,h:2.30},bedBox:false};
 const FC_MIN={studio:2.40,kitchen:2.00,bath:2.00},FC_MAX=2.90;
 const ceilY=k=>fauxCeil[k].on?fauxCeil[k].h:H;   // hauteur du plafond visible de la pièce
+const bedHigh=()=>Math.min(HIGH,ceilY('studio')-0.42);   // lit monté : s'arrête sous le (faux) plafond, literie comprise
 /* ---------- Plafond : spots encastrés et ventilateur ---------- */
 const ceil=new THREE.Mesh(new THREE.PlaneGeometry(W,D),new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,opacity:0.05,depthWrite:false,side:THREE.DoubleSide}));
 ceil.rotation.x=Math.PI/2;ceil.position.set(W/2,H,D/2);scene.add(ceil);
@@ -1996,8 +1997,8 @@ function applyFanLamp(){
   const b=document.getElementById('fanLampBtn');
   if(b){b.setAttribute('aria-pressed',String(fanLampOn));b.title=fanLampOn?'Éteindre la lampe du ventilateur':'Allumer la lampe du ventilateur';}
 }
-// Faux plafonds : plans tournés vers le bas (invisibles vus de dessus, comme les plafonds). Dans la pièce principale,
-// il est percé au-dessus du lit pour que celui-ci puisse monter ; le coffrage (lié au lit) ferme le pourtour.
+// Faux plafonds : plans tournés vers le bas (invisibles vus de dessus, comme les plafonds). Ils couvrent toute la pièce ;
+// le lit monté s'arrête dessous et le coffrage (lié au lit) cache son pourtour.
 const fauxG={studio:new THREE.Group(),kitchen:new THREE.Group(),bath:new THREE.Group()};
 scene.add(fauxG.studio);kitchenG.add(fauxG.kitchen,fauxG.bath);
 const bedBoxG=new THREE.Group();bedUnit.add(bedBoxG);
@@ -2007,31 +2008,15 @@ function ceilPlane(g,x0,x1,z0,z1,y){
   const m=new THREE.Mesh(new THREE.PlaneGeometry(x1-x0,z1-z0),M.ceiling);
   m.rotation.x=Math.PI/2;m.position.set((x0+x1)/2,y,(z0+z1)/2);m.receiveShadow=true;g.add(m);
 }
-function bedHole(){   // emprise du lit et de son coffrage, en coordonnées de la pièce
-  bedUnit.updateMatrixWorld();
-  const v=new THREE.Vector3();let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;
-  [[BX0-BB,0],[BX1+BB,0],[BX0-BB,BZ+BB],[BX1+BB,BZ+BB]].forEach(([x,z])=>{
-    v.set(x,0,z).applyMatrix4(bedUnit.matrixWorld);x0=Math.min(x0,v.x);x1=Math.max(x1,v.x);z0=Math.min(z0,v.z);z1=Math.max(z1,v.z);
-  });
-  return[Math.max(0,x0),Math.min(W,x1),Math.max(0,z0),Math.min(D,z1)];
-}
 let fauxSig='',fauxTop=H;
 function buildFaux(){
   Object.values(fauxG).forEach(g=>{while(g.children.length){const c=g.children.pop();c.geometry.dispose();}});
   while(bedBoxG.children.length){const c=bedBoxG.children.pop();c.geometry.dispose();}
-  const bedShown=bedUnit.visible;
-  if(fauxCeil.studio.on){
-    const y=fauxCeil.studio.h;
-    if(bedShown){   // quatre bandes autour de l'emprise du lit
-      const[hx0,hx1,hz0,hz1]=bedHole();
-      ceilPlane(fauxG.studio,0,W,0,hz0,y);ceilPlane(fauxG.studio,0,W,hz1,D,y);
-      ceilPlane(fauxG.studio,0,hx0,hz0,hz1,y);ceilPlane(fauxG.studio,hx1,W,hz0,hz1,y);
-    }else ceilPlane(fauxG.studio,0,W,0,D,y);
-  }
+  if(fauxCeil.studio.on)ceilPlane(fauxG.studio,0,W,0,D,fauxCeil.studio.h);   // toute la pièce, lit compris
   if(fauxCeil.kitchen.on)ceilPlane(fauxG.kitchen,KX1-0.01,KX0,KZ0,KZ1,fauxCeil.kitchen.h);
   if(fauxCeil.bath.on)ceilPlane(fauxG.bath,SBX0,SBX1,SBZ0,SBZ1,fauxCeil.bath.h);
   if(fauxCeil.bedBox){   // coffrage : devant et deux côtés, du plafond jusqu'au dessous du lit monté
-    const top=ceilY('studio'),y0=HIGH;
+    const top=ceilY('studio'),y0=bedHigh();
     box(bedBoxG,M.ceiling,BX0-BB,BX1+BB,y0,top,BZ+0.005,BZ+BB);
     box(bedBoxG,M.ceiling,BX0-BB,BX0-0.003,y0,top,0,BZ+0.005);
     box(bedBoxG,M.ceiling,BX1+0.003,BX1+BB,y0,top,0,BZ+0.005);
@@ -2044,27 +2029,29 @@ function buildFaux(){
   }
   syncFauxInputs();
 }
-// reconstruit dès qu'un réglage change ou que le lit bouge (appelé à chaque image, ne coûte qu'une comparaison)
+// reconstruit dès qu'un réglage change (appelé à chaque image, ne coûte qu'une comparaison)
 function syncFaux(){
-  const p=bedUnit.position,s=JSON.stringify(fauxCeil)+(bedUnit.visible?1:0)+p.x.toFixed(3)+p.z.toFixed(3)+bedUnit.rotation.y.toFixed(3);
+  const s=JSON.stringify(fauxCeil);
   if(s!==fauxSig){fauxSig=s;buildFaux();}
 }
 function syncFauxInputs(){
   ['studio','kitchen','bath'].forEach(k=>{
     const b=document.querySelector('[data-fc="'+k+'"]'),i=document.querySelector('[data-fch="'+k+'"]');
     b.setAttribute('aria-pressed',String(fauxCeil[k].on));
-    if(document.activeElement!==i)i.value=Math.round(fauxCeil[k].h*100);
+    if(document.activeElement!==i)i.value=fauxDrop(k);
     i.disabled=!fauxCeil[k].on;
+    document.querySelector('[data-fcr="'+k+'"]').textContent='reste '+fauxCeil[k].h.toFixed(2).replace('.',',')+' m';
   });
   document.getElementById('bedBoxBtn').setAttribute('aria-pressed',String(fauxCeil.bedBox));
 }
+const fauxDrop=k=>Math.round((H-fauxCeil[k].h)*100);   // hauteur du faux plafond : sous le plafond d'origine, en cm
 function setFauxH(k,cm){
   if(isNaN(cm))return;
   fauxCeil[k].h=Math.min(FC_MAX,Math.max(FC_MIN[k],Math.round(cm)/100));
 }
 document.querySelectorAll('[data-fc]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.fc;fauxCeil[k].on=!fauxCeil[k].on;syncFaux();save();}));
 document.querySelectorAll('[data-fch]').forEach(i=>{
-  i.addEventListener('change',()=>{setFauxH(i.dataset.fch,parseFloat(i.value));i.value=Math.round(fauxCeil[i.dataset.fch].h*100);syncFaux();save();});
+  i.addEventListener('change',()=>{const k=i.dataset.fch;setFauxH(k,H*100-parseFloat(i.value));i.value=fauxDrop(k);syncFaux();save();});
 });
 document.getElementById('bedBoxBtn').addEventListener('click',()=>{fauxCeil.bedBox=!fauxCeil.bedBox;syncFaux();save();});
 // dimensions de la petite fenêtre de la cuisine
@@ -3608,7 +3595,7 @@ function frame(){
 
   fanSpeed+=((fanOn&&showState.fan?9:0)-fanSpeed)*Math.min(1,dt*(fanOn?0.8:0.5));
   if(fanRotor)fanRotor.rotation.y+=fanSpeed*dt;
-  bedGroup.position.y=LOW+(HIGH-LOW)*ease(bedT);
+  bedGroup.position.y=LOW+(bedHigh()-LOW)*ease(bedT);
   bedLegs.visible=bedT<0.02;
 
   for(const o of openables){o.t=step(o.t,o.target,dt,o.speed);o.apply(ease(o.t));}
