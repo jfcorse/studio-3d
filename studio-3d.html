@@ -2139,7 +2139,9 @@ let tableT=1,tableTarget=1;
 const ROOMS=[
   {x0:0,x1:W,z0:0,z1:D,n:['mur de gauche','mur de droite','mur du fond',"mur d'entrée"]},
   {x0:KX1,x1:KX0,z0:KZ0,z1:KZ1,n:['mur de la fenêtre','mur du studio','mur des meubles hauts','mur de la salle de bain']},
-  {x0:SBX0,x1:SBX1,z0:SBZ0,z1:SBZ1,n:['mur du lave-main','mur de la douche','mur de la porte','mur du fond']},
+  // salle de bain : la paroi vitrée de la douche compte comme un mur ; la douche est une « pièce » à part (colonne de douche)
+  {x0:SBX1-SHW,x1:SBX1,z0:SBZ0,z1:SBZ1,n:['porte de la douche','mur côté studio','mur d\u2019entrée','mur du fond']},
+  {x0:SBX0,x1:SBX1-SHW,z0:SBZ0,z1:SBZ1,n:['mur du lave-main','porte de la douche','mur de la porte','mur du fond']},
 ];
 let dimsOn=true,dimTxt='';
 const dimG=new THREE.Group();dimG.visible=false;dimG.renderOrder=10;scene.add(dimG);
