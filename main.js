@@ -271,9 +271,9 @@ function buildMenu() {
       submenu: [
         // les plans ne s'enregistrent que sur GitHub (dépôt privé) : plus d'enregistrement en fichier sur le PC
         { label: 'Nouveau plan', accelerator: 'CmdOrCtrl+N', click: newPlan },
-        { label: 'Ouvrir…', accelerator: 'CmdOrCtrl+O', click: () => { if (checkPage()) sendMenu('githubDialog'); } },
+        { label: 'Ouvrir…', accelerator: 'CmdOrCtrl+O', click: () => { if (checkPage()) sendMenu('githubOpen'); } },
         { label: 'Enregistrer', accelerator: 'CmdOrCtrl+S', click: () => { if (checkPage()) sendMenu('githubSave'); } },
-        { label: 'Enregistrer sous…', accelerator: 'CmdOrCtrl+Shift+S', click: () => { if (checkPage()) sendMenu('githubDialog'); } },
+        { label: 'Enregistrer sous…', accelerator: 'CmdOrCtrl+Shift+S', click: () => { if (checkPage()) sendMenu('githubSaveAs'); } },
         { type: 'separator' },
         { label: 'Ouvrir le dossier GitHub', click: () => { if (checkPage()) sendMenu('githubFolder'); } },
         { type: 'separator' },

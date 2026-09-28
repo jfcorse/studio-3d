@@ -25,7 +25,7 @@ Tout se fait dans le panneau : déplacer les meubles à la souris (les réglages
 Les plans se gèrent dans le menu **Fichier** et sont enregistrés dans un **dépôt GitHub privé** : on retrouve les mêmes plans sur tous ses PC.
 
 - **Nouveau plan** (Ctrl+N) : repart de l'agencement d'origine ;
-- **Ouvrir un plan…** (Ctrl+O) ;
+- **Ouvrir…** (Ctrl+O) : liste des plans, pour en ouvrir un ou le **supprimer** ;
 - **Enregistrer** (Ctrl+S) et **Enregistrer sous…** (Ctrl+Maj+S).
 
 Dans un navigateur, ce sont les boutons de la section « Mes plans » du panneau.
