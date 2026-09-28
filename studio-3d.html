@@ -2272,26 +2272,28 @@ const shelfSize={w:0.65,d:0.60,y:0.86,f:0.30};   // y : dessous de la tablette (
 const shelfG=new THREE.Group();
 // rabat : partie avant articulée qui se rabat vers le bas (clic dessus ou bouton « Rabattre »), comme la table murale
 const shelfFlap=new THREE.Group();
+const shelfFlapLen=()=>Math.max(0,Math.min(shelfSize.f,0.70,shelfSize.y-0.10));   // rabattu, il reste à 10 cm du sol au moins
 function buildShelf(){
   while(shelfG.children.length){const c=shelfG.children.pop();if(c!==shelfFlap)c.geometry&&c.geometry.dispose();}
   while(shelfFlap.children.length){const c=shelfFlap.children.pop();c.geometry&&c.geometry.dispose();}
   // repère local : longueur en x, profondeur en z (mur en −z, pièce en +z) ; 2,5 cm d'épaisseur, par défaut juste au-dessus du lave-linge (85 cm)
-  const w=shelfSize.w/2,z0=-shelfSize.d/2,z1=shelfSize.d/2,f=Math.min(shelfSize.f,shelfSize.d-0.10),zh=z1-f,y0=shelfSize.y,y1=y0+0.025;
-  box(shelfG,M.shelf,-w,w,y0,y1,z0,f>0?zh-0.002:z1);   // partie fixe
+  // rabat : rallonge articulée sous l'arête avant (comme la table murale) ; rabattu, il pend devant le lave-linge
+  const w=shelfSize.w/2,z0=-shelfSize.d/2,z1=shelfSize.d/2,f=shelfFlapLen(),y0=shelfSize.y,y1=y0+0.025;
+  box(shelfG,M.shelf,-w,w,y0,y1,z0,z1);   // partie fixe
   if(f>0){
-    shelfFlap.position.set(0,y1,zh);   // charnière le long de l'arête du dessus
-    box(shelfFlap,M.shelf,-w,w,-0.025,0,0,f);
-    box(shelfFlap,M.metal,-w+0.04,-w+0.10,-0.027,-0.025,-0.01,0.03,false);box(shelfFlap,M.metal,w-0.10,w-0.04,-0.027,-0.025,-0.01,0.03,false);   // charnières
+    shelfFlap.position.set(0,y0,z1+0.002);   // charnière sous l'arête avant
+    box(shelfFlap,M.shelf,-w,w,0,0.025,0,f);
+    box(shelfFlap,M.metal,-w+0.04,-w+0.10,-0.002,0,-0.03,0.03,false);box(shelfFlap,M.metal,w-0.10,w-0.04,-0.002,0,-0.03,0.03,false);   // charnières
     shelfG.add(shelfFlap);
   }
 }
 buildShelf();
 // rabattu : le rabat pend vers le bas (rotation autour de la charnière)
-markOpenable(openable('shelfFlap',e=>{shelfFlap.rotation.x=Math.PI/2*e;},()=>shelfSize.f>0?[shelfFlap]:[]),shelfFlap);
+markOpenable(openable('shelfFlap',e=>{shelfFlap.rotation.x=Math.PI/2*e;},()=>shelfFlapLen()>0?[shelfFlap]:[]),shelfFlap);
 const shelfItem=addItem('shelf','Tablette au-dessus du lave-linge',shelfG,shelfSize.w,shelfSize.d,{x:KX1-NICHED+shelfSize.d/2,z:(NICHEZ0+NICHEZ1)/2,r:Math.PI/2},'');
 shelfItem.bounds={x0:KX1,x1:KX0,z0:KZ0,z1:KZ1};
 shelfItem.niche={x0:KX1-NICHED,z0:NICHEZ0,z1:NICHEZ1,h:NICHEH};
-function shelfInfo(){shelfItem.info=Math.round(shelfSize.w*100)+' × '+Math.round(shelfSize.d*100)+' cm, dessus à '+Math.round((shelfSize.y+0.025)*100)+' cm du sol'+(shelfSize.f>0?', rabat de '+Math.round(Math.min(shelfSize.f,shelfSize.d-0.10)*100)+' cm (clique dessus pour le rabattre ou le relever)':'');}
+function shelfInfo(){shelfItem.info=Math.round(shelfSize.w*100)+' × '+Math.round(shelfSize.d*100)+' cm, dessus à '+Math.round((shelfSize.y+0.025)*100)+' cm du sol'+(shelfFlapLen()>0?', rabat de '+Math.round(shelfFlapLen()*100)+' cm (clique dessus pour le rabattre ou le relever)':'');}
 shelfInfo();
 /* Étagère ouverte d'angle : étagères rectangulaires, adossées au mur du fond de l'angle, tenues à gauche par un
    panneau contre l'autre mur et fixées au mur ; côté droit libre, sans montant. Dans l'angle de la cuisine devant
@@ -2349,12 +2351,12 @@ cshelfInfo();
 {
   const iw=document.getElementById('shelfW'),id_=document.getElementById('shelfD'),iy=document.getElementById('shelfY'),iff=document.getElementById('shelfF');
   window.syncShelfInputs=()=>{iw.value=Math.round(shelfSize.w*100);id_.value=Math.round(shelfSize.d*100);iy.value=Math.round((shelfSize.y+0.025)*100);iff.value=Math.round(shelfSize.f*100);
-    const b=document.getElementById('shelfFoldBtn');if(b)b.hidden=!(shelfSize.f>0);};
+    const b=document.getElementById('shelfFoldBtn');if(b)b.hidden=!(shelfFlapLen()>0);};
   const upd=()=>{
     let w=parseFloat(iw.value),d=parseFloat(id_.value),y=parseFloat(iy.value),f=parseFloat(iff.value);
     w=isNaN(w)?shelfSize.w*100:Math.min(200,Math.max(30,w));d=isNaN(d)?shelfSize.d*100:Math.min(80,Math.max(20,d));
     y=isNaN(y)?(shelfSize.y+0.025)*100:Math.min(220,Math.max(40,y));   // hauteur du dessus, en cm
-    f=isNaN(f)?shelfSize.f*100:Math.min(d-10,Math.max(0,f));            // le rabat laisse au moins 10 cm de partie fixe
+    f=isNaN(f)?shelfSize.f*100:Math.min(70,Math.max(0,f));
     shelfSize.w=w/100;shelfSize.d=d/100;shelfSize.y=y/100-0.025;shelfSize.f=f/100;shelfItem.w=shelfSize.w;shelfItem.d=shelfSize.d;
     buildShelf();shelfInfo();clampItem(shelfItem);syncShelfInputs();
     if(selected===shelfItem){selBox.setFromObject(shelfG);showSel(shelfItem);}
@@ -2940,7 +2942,7 @@ function loadInto(s){
   if(s&&s.ward&&s.ward.w){Object.assign(wardSize,s.ward);buildWardrobe();wardInfo();}
   if(s&&s.sofa&&s.sofa.w){Object.assign(sofaSize,s.sofa);buildSofa();sofaInfo();}
   if(s&&s.table&&s.table.w){Object.assign(tableSize,s.table);buildTable();tableInfo();}
-  if(s&&s.shelf&&s.shelf.w){shelfSize.w=Math.min(2,Math.max(0.3,+s.shelf.w));shelfSize.d=Math.min(0.8,Math.max(0.2,+s.shelf.d||0.6));shelfSize.y=typeof s.shelf.y==='number'?Math.min(2.2,Math.max(0.4,s.shelf.y)):0.86;shelfSize.f=typeof s.shelf.f==='number'?Math.min(shelfSize.d-0.1,Math.max(0,s.shelf.f)):0.30;shelfItem.w=shelfSize.w;shelfItem.d=shelfSize.d;buildShelf();shelfInfo();syncShelfInputs();}
+  if(s&&s.shelf&&s.shelf.w){shelfSize.w=Math.min(2,Math.max(0.3,+s.shelf.w));shelfSize.d=Math.min(0.8,Math.max(0.2,+s.shelf.d||0.6));shelfSize.y=typeof s.shelf.y==='number'?Math.min(2.2,Math.max(0.4,s.shelf.y)):0.86;shelfSize.f=typeof s.shelf.f==='number'?Math.min(0.7,Math.max(0,s.shelf.f)):0.30;shelfItem.w=shelfSize.w;shelfItem.d=shelfSize.d;buildShelf();shelfInfo();syncShelfInputs();}
   if(s&&s.cshelf&&s.cshelf.w){cshelf.w=Math.min(1,Math.max(0.3,+s.cshelf.w));cshelf.d=Math.min(0.5,Math.max(0.15,+s.cshelf.d||0.3));cshelf.h=Math.min(2.2,Math.max(0.6,+s.cshelf.h||1.8));cshelf.n=Math.min(8,Math.max(2,Math.round(+s.cshelf.n||5)));cshelf.back=s.cshelf.back!==false;cshelf.side=!!s.cshelf.side;cshelfItem.w=cshelf.w;cshelfItem.d=cshelf.d;buildCShelf();cshelfInfo();syncCShelfInputs();}
   if(s&&s.mirror&&s.mirror.w){mirror.w=Math.min(1.5,Math.max(0.2,+s.mirror.w));mirror.h=Math.min(1.5,Math.max(0.2,+s.mirror.h||0.6));mirror.y=Math.min(H-0.05-mirror.h,Math.max(0.4,+s.mirror.y||1.1));mirrorItem.d=mirror.w;buildMirror();mirrorInfo();syncMirrorInputs();}
   if(s&&s.kwin2&&s.kwin2.w){kWin2.w=Math.min(0.8,Math.max(0.2,+s.kwin2.w));kWin2.h=Math.min(0.65,Math.max(0.2,+s.kwin2.h||0.35));kWin2.y=Math.min(H-0.05-kWin2.h,Math.max(0.95,+s.kwin2.y||1.60));buildKitchenRight();syncKWin2Inputs();}
