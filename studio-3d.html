@@ -111,6 +111,7 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 button.ghost{border-color:var(--line);color:var(--muted)}
 .sel{margin:0 0 8px;font-size:.88rem;color:var(--muted);min-height:1.2em}
 .sel strong{color:var(--ink);font-weight:600}
+.seldist{color:var(--accent);font-weight:500}
 .sizes{display:none;gap:8px;margin:0 0 10px}
 .sizes.on{display:flex}
 #tableSizes.on{display:flex}
@@ -197,6 +198,9 @@ button.ghost{border-color:var(--line);color:var(--muted)}
   </button>
   <button id="resetBtn" class="ib" title="Replacer les meubles" aria-label="Replacer les meubles">
     <svg viewBox="0 0 24 24"><path d="M3.5 20.5h17M5 20.5v-6h8v6M5 16.5h8M16 20.5V9.5"/><path d="M13.5 3.5h7v7"/><path d="M20.5 3.5l-7 7"/></svg>
+  </button>
+  <button id="dimsBtn" class="ib" aria-pressed="true" title="Masquer les cotes (distances aux murs)" aria-label="Masquer les cotes (distances aux murs)">
+    <svg viewBox="0 0 24 24"><path d="M2.5 16.5 16.5 2.5l5 5-14 14z"/><path d="M6 13l2 2M8.5 10.5l1.5 1.5M11 8l2 2M13.5 5.5l1.5 1.5"/></svg>
   </button>
   <button id="viewBtn" class="ib" title="Recentrer la vue" aria-label="Recentrer la vue">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="1.6" class="fill"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
@@ -1091,7 +1095,7 @@ M.bathSpotLens=new THREE.MeshStandardMaterial({color:0xfafafa,emissive:0xffe8c4,
 const bathSpots=[];
 let bathDoorG,bathDoorItem,showerItem,showerModels;
 let showerType='two';   // porte de douche : 'two' (2 vantaux, passage 60 cm), 'one' (1 vitre, passage 46 cm) ou 'swing' (porte battante de 60 cm)
-const wcG=new THREE.Group(),basinG=new THREE.Group();   // WC et lave-main, déplaçables dans la salle de bain
+const wcG=new THREE.Group(),basinG=new THREE.Group(),showerColG=new THREE.Group();   // WC et lave-main, déplaçables dans la salle de bain
 {
   // sol carrelé
   const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d');
@@ -1118,13 +1122,13 @@ const wcG=new THREE.Group(),basinG=new THREE.Group();   // WC et lave-main, dép
   const SX0=SBX1-SHW,SZ0=SBZ1-1.00,SZ1=SBZ1;
   box(showerG,M.ceramic,SX0,SBX1,0,0.05,SZ0,SZ1);
   box(showerG,M.chromeFix,SBX1-0.40,SBX1-0.30,0.051,0.053,(SZ0+SZ1)/2-0.05,(SZ0+SZ1)/2+0.05,false);   // bonde
-  // colonne de douche contre le mur
-  const cz=(SZ0+SZ1)/2+0.15;
-  cyl(showerG,M.chrome,SBX1-0.05,0.95,2.08,cz,0.013);
-  box(showerG,M.chrome,SBX1-0.05,SBX1-0.005,1.00,1.12,cz-0.09,cz+0.09);   // mitigeur
-  const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.011,0.011,0.30,10),M.chrome);arm.rotation.z=Math.PI/2;arm.position.set(SBX1-0.20,2.08,cz);showerG.add(arm);
-  cyl(showerG,M.chrome,SBX1-0.33,2.05,2.07,cz,0.12);   // pomme de douche
-  cyl(showerG,M.chrome,SBX1-0.12,1.35,1.55,cz-0.14,0.012);   // douchette
+  // colonne de douche : déplaçable le long des murs de la douche (enregistrée plus bas comme meuble)
+  // repère local : mur en x=0, la colonne avance vers −x
+  cyl(showerColG,M.chrome,-0.05,0.95,2.08,0,0.013);
+  box(showerColG,M.chrome,-0.05,-0.005,1.00,1.12,-0.09,0.09);   // mitigeur
+  const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.011,0.011,0.30,10),M.chrome);arm.rotation.z=Math.PI/2;arm.position.set(-0.20,2.08,0);showerColG.add(arm);
+  cyl(showerColG,M.chrome,-0.33,2.05,2.07,0,0.12);   // pomme de douche
+  cyl(showerColG,M.chrome,-0.12,1.35,1.55,-0.14,0.012);   // douchette
   // Paroi vitrée, deux modèles au choix (dans la carte de la douche) :
   //  - 2 vantaux de 30 cm qui coulissent l'un derrière l'autre devant une partie fixe de 40 cm : passage 60 cm ;
   //  - 1 vitre coulissante devant une partie fixe de même largeur (~49 cm chacune) : passage 46 cm.
@@ -2007,6 +2011,11 @@ let sitterOn=false;
     ell(V(sd*0.15,0.585,-0.31),0.04,0.02,0.08);   // main
   });
 }
+function syncDimsBtn(){
+  const b=document.getElementById('dimsBtn');b.setAttribute('aria-pressed',String(dimsOn));
+  tip(b,dimsOn?'Masquer les cotes (distances aux murs)':'Afficher les cotes : distances entre l\u2019élément sélectionné et les murs');
+}
+document.getElementById('dimsBtn').addEventListener('click',()=>{dimsOn=!dimsOn;syncDimsBtn();dimTxt='';save();});
 function applySitter(){
   sitterG.visible=sitterOn;
   const b=document.getElementById('sitterBtn');
@@ -2014,6 +2023,17 @@ function applySitter(){
   tip(b,sitterOn?'Enlever la personne assise sur les WC':'Personne assise sur les WC (1,80 m, 100 kg) : genoux à 80 cm et pieds à 91 cm du mur du WC, 58 cm de large aux coudes');
 }
 document.getElementById('sitterBtn').addEventListener('click',()=>{sitterOn=!sitterOn;applySitter();save();});
+// colonne de douche : glisse le long des trois murs de la douche et se retourne face à la douche
+const SHZ0=SBZ1-1.00,SHX0=SBX1-SHW,COLM=0.18;   // COLM : écart minimal avec les angles
+const showerColItem=addItem('showercol','Colonne de douche',showerColG,0.10,0.36,{x:SBX1,z:(SHZ0+SBZ1)/2+0.15,r:0},
+  'mitigeur, pomme de douche et douchette ; glisse-la le long des murs de la douche');
+showerColItem.noRotate=true;
+showerColItem.snapFn=it=>{
+  const p=it.obj.position,x=Math.min(SBX1,Math.max(SHX0,p.x)),z=Math.min(SBZ1,Math.max(SBZ0,p.z));
+  const d={x1:SBX1-x,z1:SBZ1-z,z0:z-SBZ0},k=Object.keys(d).reduce((a,b)=>d[a]<=d[b]?a:b);
+  if(k==='x1'){p.set(SBX1,0,Math.min(SBZ1-COLM,Math.max(SHZ0+COLM,z)));it.obj.rotation.y=0;}
+  else{p.set(Math.min(SBX1-COLM,Math.max(SHX0+COLM,x)),0,k==='z1'?SBZ1:SBZ0);it.obj.rotation.y=k==='z1'?-Math.PI/2:Math.PI/2;}
+};
 const wcItem=addItem('wc','WC suspendu',wcG,0.36,0.49,{x:(SBX0+SBX1-SHW)/2-0.02,z:SBZ1-0.245,r:0},'36 × 49 cm depuis le mur, blanc, avec plaque de commande');
 wcItem.bounds=BATH_FREE;
 const basinItem=addItem('basin','Lave-main',basinG,0.30,0.30,{x:SBX0+0.15,z:SBZ0+0.15,r:0},'30 × 30 cm, meuble sous le lavabo blanc encastré, robinet');
@@ -2115,12 +2135,63 @@ document.getElementById('floorParquet').addEventListener('click',()=>{if(floorSt
 
 /* ---------- Contraintes, sélection, sauvegarde ---------- */
 let tableT=1,tableTarget=1;
+/* ---------- Cotes : distances entre l'élément sélectionné et les murs de sa pièce, mises à jour pendant qu'on le déplace ---------- */
+const ROOMS=[
+  {x0:0,x1:W,z0:0,z1:D,n:['mur de gauche','mur de droite','mur du fond',"mur d'entrée"]},
+  {x0:KX1,x1:KX0,z0:KZ0,z1:KZ1,n:['mur de la fenêtre','mur du studio','mur des meubles hauts','mur de la salle de bain']},
+  {x0:SBX0,x1:SBX1,z0:SBZ0,z1:SBZ1,n:['mur du lave-main','mur de la douche','mur de la porte','mur du fond']},
+];
+let dimsOn=true,dimTxt='';
+const dimG=new THREE.Group();dimG.visible=false;dimG.renderOrder=10;scene.add(dimG);
+const dimParts=[0,1,2,3].map(()=>{
+  const lm=new THREE.LineBasicMaterial({color:0x2f6f73,depthTest:false,transparent:true});
+  const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]),lm);
+  const c=document.createElement('canvas');c.width=160;c.height=56;
+  const tex=new THREE.CanvasTexture(c);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true}));sp.scale.set(0.44,0.155,1);
+  line.renderOrder=sp.renderOrder=10;dimG.add(line,sp);
+  return{line,sp,c,tex,val:null};
+});
+function dimLabel(p,cm){
+  if(p.val===cm)return;p.val=cm;
+  const g=p.c.getContext('2d');g.clearRect(0,0,160,56);
+  g.fillStyle='rgba(255,255,255,0.92)';g.strokeStyle='#2f6f73';g.lineWidth=3;
+  g.beginPath();g.roundRect(3,3,154,50,14);g.fill();g.stroke();
+  g.fillStyle='#1f2a2e';g.font='600 30px system-ui,sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(cm+' cm',80,29);
+  p.tex.needsUpdate=true;
+}
+function itemBox(it){
+  const[x0,x1,z0,z1]=footprint(it),r=it.obj.rotation.y,c=Math.cos(r),s=Math.sin(r),o=it.obj.position;
+  let a=1e9,b=-1e9,e=1e9,f=-1e9;
+  [[x0,z0],[x1,z0],[x0,z1],[x1,z1]].forEach(([lx,lz])=>{const wx=lx*c+lz*s,wz=-lx*s+lz*c;a=Math.min(a,wx);b=Math.max(b,wx);e=Math.min(e,wz);f=Math.max(f,wz);});
+  return[o.x+a,o.x+b,o.z+e,o.z+f];
+}
+function updateDims(){
+  const it=selected;
+  const room=it&&dimsOn&&!it.fixed&&it.obj.visible&&!walk.on&&it.w&&ROOMS.find(R=>{const o=it.obj.position;return o.x>=R.x0-0.01&&o.x<=R.x1+0.01&&o.z>=R.z0-0.01&&o.z<=R.z1+0.01;});
+  dimG.visible=!!room;
+  const el=document.getElementById('selDist');
+  if(!room){if(el&&dimTxt){el.textContent='';dimTxt='';}return;}
+  const[bx0,bx1,bz0,bz1]=itemBox(it),cx=(bx0+bx1)/2,cz=(bz0+bz1)/2,y=0.03;
+  const segs=[[room.x0,cz,bx0,cz],[bx1,cz,room.x1,cz],[cx,room.z0,cx,bz0],[cx,bz1,cx,room.z1]];
+  const txt=[];
+  segs.forEach(([ax,az,bx,bz],i)=>{
+    const p=dimParts[i],d=Math.max(0,Math.round(Math.hypot(bx-ax,bz-az)*100*Math.sign((bx-ax)+(bz-az)||1)));
+    txt.push(room.n[i]+' '+d+' cm');
+    const show=d>=1;p.line.visible=p.sp.visible=show;if(!show)return;
+    const pos=p.line.geometry.attributes.position;pos.setXYZ(0,ax,y,az);pos.setXYZ(1,bx,y,bz);pos.needsUpdate=true;p.line.geometry.computeBoundingSphere();
+    p.sp.position.set((ax+bx)/2,0.12,(az+bz)/2);dimLabel(p,d);
+  });
+  const t=' — Distances : '+txt.join(' · ');
+  if(el&&t!==dimTxt){el.textContent=t;dimTxt=t;}
+}
 function footprint(it){
   if(it===sofaItem){const extra=Math.max(0,sofaBackLen()-0.18)*ease(sofaBackT);return[-it.w/2,it.w/2,-it.d/2-extra,it.d/2];}
   return[-it.w/2,it.w/2,-it.d/2,it.d/2];
 }
 function clampItem(it){
   if(it.wallSnap){snapWall(it);if(selected===it)showSel(it);return;}
+  if(it.snapFn){it.snapFn(it);return;}
   if(it.id==='fan'){const R=fanSize.d/2;it.obj.position.x=Math.min(W-R,Math.max(R,it.obj.position.x));it.obj.position.z=Math.min(D-R,Math.max(R,it.obj.position.z));if(selected===it)showSel(it);return;}
   const bx0=it.bounds?it.bounds.x0:0,bx1=it.bounds?it.bounds.x1:W,bz0=it.bounds?it.bounds.z0:0,bz1=it.bounds?it.bounds.z1:D;
   const[x0,x1,z0,z1]=footprint(it),r=it.obj.rotation.y,c=Math.cos(r),s=Math.sin(r);
@@ -2203,9 +2274,9 @@ function showSel(it){
   document.getElementById('kwin2Colors').classList.toggle('on',it.id==='kwin2');
   document.getElementById('shelfSizes').classList.toggle('on',it.id==='shelf');
   document.getElementById('shelfColors').classList.toggle('on',it.id==='shelf');
-  document.getElementById('tapColors').classList.toggle('on',it.id==='shower'||it.id==='basin');
+  document.getElementById('tapColors').classList.toggle('on',it.id==='shower'||it.id==='basin'||it.id==='showercol');
   if(it!==tableItem)document.getElementById('tableNote').hidden=true;
-  selEl.innerHTML='<strong>'+it.name+'</strong>, '+(it.wallSnap?wallInfo(it):it.id==='fan'?fanInfo():it.info);
+  selEl.innerHTML='<strong>'+it.name+'</strong>, '+(it.wallSnap?wallInfo(it):it.id==='fan'?fanInfo():it.info)+'<span class="seldist" id="selDist"></span>';dimTxt='';
 }
 function rotate(deg){
   if(!selected||selected.wallSnap||selected.fixed||selected.noRotate)return;
@@ -2278,7 +2349,7 @@ function groupItems(k){
   if(k==='fan')return[fanItem];
   if(k==='garden'||k==='mountains')return[];
   if(k==='shelf')return[shelfItem];
-  if(k==='kitchen')return[kitchenItem,wcItem,basinItem,washerItem];
+  if(k==='kitchen')return[kitchenItem,wcItem,basinItem,washerItem,showerColItem];
   if(k==='plant')return[plantItem];
   return items.filter(i=>i.id.startsWith('chair'));
 }
@@ -2310,7 +2381,7 @@ document.querySelectorAll('[data-show]').forEach(b=>b.addEventListener('click',(
   const k=b.dataset.show;showState[k]=!showState[k];applyShow();save();
 }));
 function getState(){
-  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),tileTone,dayLevel,sitter:sitterOn,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
+  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),tileTone,dayLevel,sitter:sitterOn,dimsOn,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
   items.forEach(it=>o.items[it.id]={x:it.obj.position.x,z:it.obj.position.z,r:it.obj.rotation.y});
   return JSON.parse(JSON.stringify(o));
 }
@@ -2363,6 +2434,7 @@ function loadInto(s){
   if(s&&typeof s.dayLevel==='number')dayLevel=Math.max(30,Math.min(160,s.dayLevel));
   if(s&&typeof s.walkH==='number')setWalkHeight(s.walkH);
   if(s&&typeof s.sitter==='boolean')sitterOn=s.sitter;
+  if(s&&typeof s.dimsOn==='boolean')dimsOn=s.dimsOn;
   if(s&&s.dim)Object.keys(dim).forEach(k=>{const v=+s.dim[k];if(v>=5&&v<=100)dim[k]=v;});
   if(s&&s.entryCup)entryCup=true;
   if(s&&s.floor&&s.floor.color)Object.assign(floorState,s.floor);
@@ -2379,7 +2451,7 @@ function loadInto(s){
   if(s&&s.items){
     items.forEach(it=>{const p=s.items[it.id];if(p){it.obj.position.set(p.x,0,p.z);it.obj.rotation.y=p.r;}});
     items.forEach(it=>{if(it.wallSnap)snapWall(it);});
-    [kitchenItem,wcItem,basinItem,washerItem,shelfItem].forEach(clampItem);   // la cuisine et la salle de bain ont pu changer depuis l'enregistrement
+    [kitchenItem,wcItem,basinItem,washerItem,shelfItem,showerColItem].forEach(clampItem);   // la cuisine et la salle de bain ont pu changer depuis l'enregistrement
     if(s.tableOpen===0){tableTarget=0;tableT=0;}
     if(s.sofaBack===1){sofaBackTarget=1;sofaBackT=1;sofaBack.rotation.x=-Math.PI/2;clampItem(sofaItem);}
   }
@@ -2387,7 +2459,7 @@ function loadInto(s){
 try{loadInto(JSON.parse(localStorage.getItem(KEY)||'null'));}catch(e){}
 
 applyShow();syncFreeze();
-applySitter();applyFloor();applyWardColor();Object.keys(colors).forEach(applyColor);applyPillows();buildSpots();applyFan();
+applySitter();syncDimsBtn();applyFloor();applyWardColor();Object.keys(colors).forEach(applyColor);applyPillows();buildSpots();applyFan();
 document.getElementById('spotBtn').addEventListener('click',()=>{spotsOn=!spotsOn;applySpots();save();});
 document.getElementById('spotCountBtn').addEventListener('click',()=>{spotCount=spotCount===4?6:spotCount===6?8:4;buildSpots();save();});
 document.getElementById('fanBtn').addEventListener('click',()=>{fanOn=!fanOn;applyFan();save();});
@@ -2455,7 +2527,7 @@ function applyPlan(state){
   buildWardrobe();wardInfo();buildSofa();sofaInfo();buildTable();poseTable(tableT);tableInfo();buildFan();fanItem.w=fanItem.d=fanSize.d;
   if(s.sofaBack===1)sofaBack.rotation.x=-Math.PI/2;
   applyShow();applyFloor();applyWardColor();Object.keys(colors).forEach(applyColor);applyPillows();buildSpots();applyFan();applyFanLamp();applyBedSpots();applyAmbiance();applyEntry();
-  syncFreeze();applyKitchenLights();syncDims();applyShowerType();applyBathTiles();applyTileTone();syncShelfInputs();syncKWin2Inputs();applySitter();
+  syncFreeze();applyKitchenLights();syncDims();applyShowerType();applyBathTiles();applyTileTone();syncShelfInputs();syncKWin2Inputs();applySitter();syncDimsBtn();
   syncBedDoorBtns();syncTableBtn();syncSofaInputs();syncTableInputs();syncWardInputs();syncSofaBackBtn();fanIn.value=Math.round(fanSize.d*100);
   items.forEach(it=>clampItem(it));
   select(null);save();
@@ -2856,6 +2928,7 @@ function frame(){
   if(selected)selBox.setFromObject(selected.obj);
 
   if(walk.on)stepWalk(dt);else controls.update();
+  updateDims();
   renderer.render(scene,camera);
   requestAnimationFrame(frame);
 }
