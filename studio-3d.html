@@ -231,7 +231,13 @@ button.ghost{border-color:var(--line);color:var(--muted)}
       <p class="swlabel">Linge de lit</p><div class="swatches" id="bedLinenSw"></div>
     </div>
     <div id="bathDoorColors" class="colorset">
-      <p class="swlabel">Couleur de la porte coulissante</p><div class="swatches" id="bathDoorSw"></div>
+      <p class="swlabel">Finition de la porte coulissante</p>
+      <div class="seg" style="flex-wrap:wrap">
+        <button data-bdstyle="paint" aria-pressed="true">Peinte</button>
+        <button data-bdstyle="wood" aria-pressed="false">Bois</button>
+        <button data-bdstyle="glass" aria-pressed="false">Bois + verre martelé</button>
+      </div>
+      <p class="swlabel">Couleur (ou essence de bois)</p><div class="swatches" id="bathDoorSw"></div>
     </div>
     <div id="wcSet" class="colorset">
       <p class="swlabel">Pose du WC</p>
@@ -1241,6 +1247,39 @@ M.basinRed=new THREE.MeshStandardMaterial({color:0xb3262e,roughness:0.4});
 M.bathSpotLens=new THREE.MeshStandardMaterial({color:0xfafafa,emissive:0xffe8c4,emissiveIntensity:0});
 const bathSpots=[];
 let bathDoorG,bathDoorItem,showerItem,showerModels;
+/* Porte coulissante : peinte, en bois, ou en bois avec un panneau de verre martelé au centre */
+let bathDoorStyle='paint';
+M.hammered=(()=>{
+  const S=256,c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d'),r=rng(41);
+  g.fillStyle='#b7c2c0';g.fillRect(0,0,S,S);
+  for(let i=0;i<420;i++){   // petites cuvettes du verre martelé
+    const x=r()*S,y=r()*S,rad=6+r()*12,gr=g.createRadialGradient(x-rad*0.3,y-rad*0.3,1,x,y,rad);
+    gr.addColorStop(0,'rgba(255,255,255,0.55)');gr.addColorStop(0.6,'rgba(170,180,178,0.25)');gr.addColorStop(1,'rgba(60,70,70,0.25)');
+    g.fillStyle=gr;g.beginPath();g.arc(x,y,rad,0,6.3);g.fill();
+  }
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2,6);t.encoding=THREE.sRGBEncoding;
+  return new THREE.MeshStandardMaterial({color:0xeef3f2,map:t,bumpMap:t,bumpScale:0.004,roughness:0.3,metalness:0.05,transparent:true,opacity:0.82});
+})();
+function buildBathDoor(){
+  while(bathDoorG.children.length){const c=bathDoorG.children.pop();c.geometry&&c.geometry.dispose();}
+  const x0=BDX0-0.03,x1=BDX1+0.03,y0=0.01,y1=BDH+0.02,z0=KZ1-0.038,z1=KZ1-0.008;
+  if(bathDoorStyle==='glass'){
+    const st=0.13,gy0=0.42,gy1=1.86;   // montants de 13 cm, verre de 40 × 144 cm environ
+    box(bathDoorG,M.bathDoor,x0,x0+st,y0,y1,z0,z1);box(bathDoorG,M.bathDoor,x1-st,x1,y0,y1,z0,z1);
+    box(bathDoorG,M.bathDoor,x0+st,x1-st,y0,gy0,z0,z1);box(bathDoorG,M.bathDoor,x0+st,x1-st,gy1,y1,z0,z1);
+    box(bathDoorG,M.hammered,x0+st,x1-st,gy0,gy1,(z0+z1)/2-0.003,(z0+z1)/2+0.003,false);
+  }else box(bathDoorG,M.bathDoor,x0,x1,y0,y1,z0,z1);
+  box(bathDoorG,M.metal,BDX0+0.02,BDX0+0.035,0.95,1.15,KZ1-0.045,KZ1-0.038,false);   // poignée cuvette
+}
+function applyBathDoorStyle(){
+  const old=M.bathDoor.map;
+  if(bathDoorStyle==='paint'){M.bathDoor.map=null;M.bathDoor.color.set(colors.bathDoor);}
+  else{M.bathDoor.map=woodTex(colors.bathDoor);M.bathDoor.color.set(0xffffff);}   // le veinage prend la teinte choisie
+  M.bathDoor.needsUpdate=true;if(old&&old!==M.bathDoor.map)old.dispose();
+  if(bathDoorG)buildBathDoor();
+  document.querySelectorAll('[data-bdstyle]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.bdstyle===bathDoorStyle)));
+  if(bathDoorItem)bathDoorItem.info='60 × 204 cm, '+(bathDoorStyle==='paint'?'peinte':bathDoorStyle==='wood'?'en bois':'en bois avec verre martelé au centre')+', coulisse le long du mur (clique dessus pour l\u2019ouvrir ou la fermer)';
+}
 let showerType='two';   // porte de douche : 'two' (2 vantaux, passage 60 cm), 'one' (1 vitre, passage 46 cm) ou 'swing' (porte battante de 60 cm)
 const wcG=new THREE.Group(),basinG=new THREE.Group(),showerColG=new THREE.Group();   // WC et lave-main, déplaçables dans la salle de bain
 {
@@ -1254,8 +1293,7 @@ const wcG=new THREE.Group(),basinG=new THREE.Group(),showerColG=new THREE.Group(
   // porte coulissante (côté cuisine) sur rail ; elle glisse devant le mur de 70 cm
   box(kitchenG,M.metal,BDX0-0.04,BDX1+0.66,BDH+0.03,BDH+0.07,KZ1-0.045,KZ1,false);
   bathDoorG=new THREE.Group();kitchenG.add(bathDoorG);
-  box(bathDoorG,M.bathDoor,BDX0-0.03,BDX1+0.03,0.01,BDH+0.02,KZ1-0.038,KZ1-0.008);
-  box(bathDoorG,M.metal,BDX0+0.02,BDX0+0.035,0.95,1.15,KZ1-0.045,KZ1-0.038,false);   // poignée cuvette
+  buildBathDoor();
   bathDoorItem={id:'bathdoor',name:'Porte coulissante de la salle de bain',obj:bathDoorG,fixed:true,noRotate:true,info:'60 × 204 cm, coulisse le long du mur (clique dessus pour l\u2019ouvrir ou la fermer)'};
   bathDoorG.userData.item=bathDoorItem;
   markOpenable(openable('bath',e=>{bathDoorG.position.x=0.63*e;},()=>[bathDoorG]),bathDoorG);
@@ -2395,7 +2433,7 @@ const COLOR_PRESETS={
   kitchenFloor:[['Terre cuite','#8a4a33'],['Terre cuite claire','#a8674a'],['Gris clair','#c7c4bd'],['Blanc cassé','#e4e0d6'],['Anthracite','#3f3f3f'],['Bleu gris','#7a8b95']],
   wall:[['Blanc cassé','#f6f5f1'],['Blanc pur','#ffffff'],['Crème','#efe4cc'],['Sable','#e3d3b3'],['Ocre','#d9a55b'],['Terracotta','#c27a55'],['Vert sauge','#b4bfa4'],['Bleu','#9fb6c9'],['Gris perle','#d4d4d0'],['Anthracite','#5b6066']],
   reveal:[['Blanc cassé','#f6f5f1'],['Crème','#efe4cc'],['Ocre','#d9a55b'],['Terracotta','#c27a55'],['Vert olive','#8f9a6a'],['Bleu','#6e8fa8'],['Gris pierre','#b7b1a6']],
-  bathDoor:[['Blanc','#f1f0ec'],['Gris clair','#c9ccd0'],['Anthracite','#4a4f55'],['Noir','#26282b'],['Chêne clair','#cfae80'],['Noyer','#6f4a30'],['Vert sauge','#a7b39a'],['Bleu','#7fa3bf'],['Terracotta','#c27a55']],
+  bathDoor:[['Blanc','#f1f0ec'],['Chêne naturel','#b8894f'],['Gris clair','#c9ccd0'],['Anthracite','#4a4f55'],['Noir','#26282b'],['Chêne clair','#cfae80'],['Noyer','#6f4a30'],['Vert sauge','#a7b39a'],['Bleu','#7fa3bf'],['Terracotta','#c27a55']],
   showerFrame:[['Chromé','#c8ccd0'],['Noir mat','#1f1f1f'],['Blanc','#f1f0ec'],['Laiton','#b89455'],['Doré','#d4af37'],['Anthracite','#4a4f55']],
   bathTaps:[['Chromé','#dfe2e5'],['Noir mat','#1f1f1f'],['Laiton brossé','#b89455'],['Doré','#d4af37'],['Cuivre','#b87333'],['Inox brossé','#a9adb1'],['Blanc','#f1f0ec'],['Gris canon de fusil','#55585c']],
   mirrorFrame:[['Noir','#2b2b2b'],['Blanc','#f1efe9'],['Chromé','#dfe2e5'],['Doré','#c9a44c'],['Chêne clair','#cfae80'],['Noyer','#6f4a30']],
@@ -2438,6 +2476,7 @@ function applyColor(k){
     const mm=mat();(Array.isArray(mm)?mm:[mm]).forEach(m=>m.color.set(colors[k]));
     if(k==='armWood')M.oakIn.color.set(shade(colors[k],0.25));
     if(k==='sofaFabric')M.sofaDark.color.set(shade(colors[k],-0.15));
+    if(k==='bathDoor'&&bathDoorStyle!=='paint')applyBathDoorStyle();
   }
   renderSwatches(sw,COLOR_PRESETS[k]||COLOR_PRESETS[k.startsWith('wall')?'wall':k],colors[k],c=>{colors[k]=c;applyColor(k);save();});
   const room=Object.keys(WALL_ROOMS).find(r=>WALL_ROOMS[r].keys.includes(k));
@@ -2472,6 +2511,12 @@ function renderSwatches(id,presets,current,onPick){
   if(!matched&&current)inp.style.outline='2px solid var(--accent)';
   inp.addEventListener('change',()=>onPick(inp.value));el.appendChild(inp);
 }
+document.querySelectorAll('[data-bdstyle]').forEach(b=>b.addEventListener('click',()=>{
+  const wasPaint=bathDoorStyle==='paint';bathDoorStyle=b.dataset.bdstyle;
+  // passage au bois depuis une peinture non boisée : teinte chêne clair par défaut
+  if(wasPaint&&bathDoorStyle!=='paint'&&!['#cfae80','#6f4a30','#b8894f','#c9a36d'].includes(colors.bathDoor.toLowerCase())){colors.bathDoor='#cfae80';applyColor('bathDoor');}
+  applyBathDoorStyle();if(selected===bathDoorItem)showSel(bathDoorItem);save();
+}));
 document.getElementById('floorGranito').addEventListener('click',()=>{if(floorState.type!=='granito'){floorState.type='granito';floorState.color=FLOOR_PRESETS.granito[0][1];applyFloor();save();}});
 document.getElementById('floorParquet').addEventListener('click',()=>{if(floorState.type!=='parquet'){floorState.type='parquet';floorState.color=FLOOR_PRESETS.parquet[2][1];applyFloor();save();}});
 
@@ -2730,7 +2775,7 @@ document.querySelectorAll('[data-show]').forEach(b=>b.addEventListener('click',(
   const k=b.dataset.show;showState[k]=!showState[k];applyShow();save();
 }));
 function getState(){
-  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),cshelf:Object.assign({},cshelf),mirror:Object.assign({},mirror),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),bathFloorTiles:Object.assign({},bathFloorTiles),tileTone,dayLevel,sitter:sitterOn,dimsOn,wcCorner,walkRecul:walk.recul,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
+  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),cshelf:Object.assign({},cshelf),mirror:Object.assign({},mirror),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),bathFloorTiles:Object.assign({},bathFloorTiles),tileTone,dayLevel,bathDoorStyle,sitter:sitterOn,dimsOn,wcCorner,walkRecul:walk.recul,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
   items.forEach(it=>o.items[it.id]={x:it.obj.position.x,z:it.obj.position.z,r:it.obj.rotation.y});
   return JSON.parse(JSON.stringify(o));
 }
@@ -2788,6 +2833,7 @@ function loadInto(s){
   if(s&&typeof s.walkH==='number')setWalkHeight(s.walkH);
   if(s&&typeof s.walkRecul==='number')setWalkRecul(s.walkRecul);
   if(s&&typeof s.sitter==='boolean')sitterOn=s.sitter;
+  if(s&&['paint','wood','glass'].includes(s.bathDoorStyle))bathDoorStyle=s.bathDoorStyle;
   if(s&&typeof s.dimsOn==='boolean')dimsOn=s.dimsOn;
   if(s&&s.dim)Object.keys(dim).forEach(k=>{const v=+s.dim[k];if(v>=5&&v<=100)dim[k]=v;});
   if(s&&s.entryCup)entryCup=true;
@@ -2813,7 +2859,7 @@ function loadInto(s){
 try{loadInto(JSON.parse(localStorage.getItem(KEY)||'null'));}catch(e){}
 
 applyShow();syncFreeze();
-applySitter();syncDimsBtn();applyFloor();applyWardColor();Object.keys(colors).forEach(applyColor);applyPillows();buildSpots();applyFan();
+applySitter();syncDimsBtn();applyBathDoorStyle();applyFloor();applyWardColor();Object.keys(colors).forEach(applyColor);applyPillows();buildSpots();applyFan();
 document.getElementById('spotBtn').addEventListener('click',()=>{spotsOn=!spotsOn;applySpots();save();});
 document.getElementById('spotCountBtn').addEventListener('click',()=>{spotCount=spotCount===4?6:spotCount===6?8:4;buildSpots();save();});
 document.getElementById('fanBtn').addEventListener('click',()=>{fanOn=!fanOn;applyFan();save();});
@@ -2881,7 +2927,7 @@ function applyPlan(state){
   buildWardrobe();wardInfo();buildSofa();sofaInfo();buildTable();poseTable(tableT);tableInfo();buildFan();fanItem.w=fanItem.d=fanSize.d;
   if(s.sofaBack===1)sofaBack.rotation.x=-Math.PI/2;
   applyShow();applyFloor();applyWardColor();Object.keys(colors).forEach(applyColor);applyPillows();buildSpots();applyFan();applyFanLamp();applyBedSpots();applyAmbiance();applyEntry();
-  syncFreeze();applyKitchenLights();syncDims();applyShowerType();applyBathTiles();applyBathFloorTiles();applyTileTone();syncShelfInputs();syncKWin2Inputs();syncCShelfInputs();syncMirrorInputs();applySitter();syncDimsBtn();
+  syncFreeze();applyKitchenLights();syncDims();applyShowerType();applyBathTiles();applyBathFloorTiles();applyTileTone();syncShelfInputs();syncKWin2Inputs();syncCShelfInputs();syncMirrorInputs();applySitter();syncDimsBtn();applyBathDoorStyle();
   syncBedDoorBtns();syncTableBtn();syncSofaInputs();syncTableInputs();syncWardInputs();syncSofaBackBtn();fanIn.value=Math.round(fanSize.d*100);
   items.forEach(it=>clampItem(it));
   select(null);save();
