@@ -224,6 +224,14 @@ button.ghost{border-color:var(--line);color:var(--muted)}
     <div id="bathDoorColors" class="colorset">
       <p class="swlabel">Couleur de la porte coulissante</p><div class="swatches" id="bathDoorSw"></div>
     </div>
+    <div id="wcSet" class="colorset">
+      <p class="swlabel">Pose du WC</p>
+      <div class="seg">
+        <button data-wcmode="wall" aria-pressed="true">Contre un mur</button>
+        <button data-wcmode="corner" aria-pressed="false">En angle (bâti d'angle)</button>
+      </div>
+      <p class="note" style="margin:0 0 8px">En angle, le WC se place à 45° dans l'angle le plus proche ; glisse-le pour changer d'angle.</p>
+    </div>
     <div id="basinColors" class="colorset">
       <p class="swlabel">Couleur du meuble du lave-main</p><div class="swatches" id="basinSw"></div>
     </div>
@@ -2036,6 +2044,35 @@ showerColItem.snapFn=it=>{
 };
 const wcItem=addItem('wc','WC suspendu',wcG,0.36,0.49,{x:(SBX0+SBX1-SHW)/2-0.02,z:SBZ1-0.245,r:0},'36 × 49 cm depuis le mur, blanc, avec plaque de commande');
 wcItem.bounds=BATH_FREE;
+/* WC en angle : bâti d'angle triangulaire (côtés de 55 cm le long des murs), WC à 45°, dos contre le bâti.
+   Il se cale dans l'angle le plus proche parmi les deux vrais angles de la salle de bain (mur du lave-main avec
+   le mur de la porte ou avec le mur du fond) ; de l'autre côté, ce sont la porte et la paroi de la douche. */
+const WC_LEG=0.55,WC_TRI=WC_LEG/Math.SQRT2;   // distance de l'angle à la face avant du bâti ≈ 39 cm
+let wcCorner=false;
+const wcFrameG=new THREE.Group();wcFrameG.visible=false;wcG.add(wcFrameG);
+{
+  const sh=new THREE.Shape();sh.moveTo(-WC_TRI,0);sh.lineTo(0,-WC_TRI);sh.lineTo(WC_TRI,0);sh.closePath();
+  const geo=new THREE.ExtrudeGeometry(sh,{depth:1.20,bevelEnabled:false});
+  const m=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:0xf3f2ee,roughness:0.6}));
+  m.rotation.x=-Math.PI/2;m.position.z=0.245;   // la forme (x, y) devient (x, −z) : la pointe (y < 0) part derrière le WC
+  m.castShadow=m.receiveShadow=true;wcFrameG.add(m);
+}
+function snapWcCorner(it){
+  const p=it.obj.position,B=BATH_FREE;
+  const cx=B.x0,cz=p.z-B.z0<B.z1-p.z?B.z0:B.z1;
+  const dx=Math.sign(cx-(B.x0+B.x1)/2),dz=Math.sign(cz-(B.z0+B.z1)/2),k=(WC_TRI+0.245)/Math.SQRT2;
+  p.set(cx-dx*k,0,cz-dz*k);it.obj.rotation.y=Math.atan2(dx,dz);
+}
+function setWcCorner(on){
+  wcCorner=on;wcFrameG.visible=on;wcItem.snapFn=on?snapWcCorner:null;wcItem.noRotate=on;
+  if(!on&&Math.abs(Math.round(wcItem.obj.rotation.y/(Math.PI/2))*(Math.PI/2)-wcItem.obj.rotation.y)>0.01)
+    wcItem.obj.rotation.y=Math.round(wcItem.obj.rotation.y/(Math.PI/2))*(Math.PI/2);   // retour contre un mur : angle droit le plus proche
+  wcItem.info=on?'36 × 49 cm, posé en angle à 45° sur un bâti d\u2019angle (côtés de 55 cm), blanc':'36 × 49 cm depuis le mur, blanc, avec plaque de commande';
+  clampItem(wcItem);
+  document.querySelectorAll('[data-wcmode]').forEach(b=>b.setAttribute('aria-pressed',String((b.dataset.wcmode==='corner')===on)));
+  if(selected===wcItem){selBox.setFromObject(wcG);showSel(wcItem);}
+}
+document.querySelectorAll('[data-wcmode]').forEach(b=>b.addEventListener('click',()=>{setWcCorner(b.dataset.wcmode==='corner');save();}));
 const basinItem=addItem('basin','Lave-main',basinG,0.30,0.30,{x:SBX0+0.15,z:SBZ0+0.15,r:0},'30 × 30 cm, meuble sous le lavabo blanc encastré, robinet');
 basinItem.bounds=BATH_FREE;
 
@@ -2253,7 +2290,7 @@ function select(it){
   if(it&&it!==was)panelEl.scrollTo({top:0,behavior:reduceMotion?'auto':'smooth'});
   selBox.visible=!!it;
   if(it){selBox.setFromObject(it.obj);showSel(it);}
-  else{selEl.textContent=frozen?'Éléments figés : plus rien n\u2019est sélectionnable. Clique sur « Défiger les éléments » pour les modifier.':'Clique sur un meuble pour le sélectionner.';document.getElementById('sofaSizes').classList.remove('on');document.getElementById('wardSizes').classList.remove('on');document.getElementById('wardColors').classList.remove('on');document.getElementById('bedColors').classList.remove('on');document.getElementById('armColors').classList.remove('on');['tableColors','chairColors','fanSizes','sofaColors','bathDoorColors','showerColors','washerColors','tapColors','shelfSizes','shelfColors','basinColors','kwin2Sizes','kwin2Colors'].forEach(i=>document.getElementById(i).classList.remove('on'));document.getElementById('tableSizes').classList.remove('on');document.getElementById('tableNote').hidden=true;}
+  else{selEl.textContent=frozen?'Éléments figés : plus rien n\u2019est sélectionnable. Clique sur « Défiger les éléments » pour les modifier.':'Clique sur un meuble pour le sélectionner.';document.getElementById('sofaSizes').classList.remove('on');document.getElementById('wardSizes').classList.remove('on');document.getElementById('wardColors').classList.remove('on');document.getElementById('bedColors').classList.remove('on');document.getElementById('armColors').classList.remove('on');['tableColors','chairColors','fanSizes','sofaColors','bathDoorColors','showerColors','washerColors','tapColors','shelfSizes','shelfColors','basinColors','wcSet','kwin2Sizes','kwin2Colors'].forEach(i=>document.getElementById(i).classList.remove('on'));document.getElementById('tableSizes').classList.remove('on');document.getElementById('tableNote').hidden=true;}
   rotBtn.disabled=rot15Btn.disabled=!it||!!it.wallSnap||!!it.fixed||!!it.noRotate;
   delBtn.disabled=!it||!isRemovable(it);
 }
@@ -2272,6 +2309,7 @@ function showSel(it){
   document.getElementById('showerColors').classList.toggle('on',it.id==='shower');
   document.getElementById('washerColors').classList.toggle('on',it.id==='washer');
   document.getElementById('basinColors').classList.toggle('on',it.id==='basin');
+  document.getElementById('wcSet').classList.toggle('on',it.id==='wc');
   document.getElementById('kwin2Sizes').classList.toggle('on',it.id==='kwin2');
   document.getElementById('kwin2Colors').classList.toggle('on',it.id==='kwin2');
   document.getElementById('shelfSizes').classList.toggle('on',it.id==='shelf');
@@ -2383,7 +2421,7 @@ document.querySelectorAll('[data-show]').forEach(b=>b.addEventListener('click',(
   const k=b.dataset.show;showState[k]=!showState[k];applyShow();save();
 }));
 function getState(){
-  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),tileTone,dayLevel,sitter:sitterOn,dimsOn,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
+  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),tileTone,dayLevel,sitter:sitterOn,dimsOn,wcCorner,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
   items.forEach(it=>o.items[it.id]={x:it.obj.position.x,z:it.obj.position.z,r:it.obj.rotation.y});
   return JSON.parse(JSON.stringify(o));
 }
@@ -2414,6 +2452,7 @@ function migrateColors(src){
 }
 function loadInto(s){
   if(!s)return;
+  if(typeof s.wcCorner==='boolean')setWcCorner(s.wcCorner);
   if(s.bedUp===0||s.bedUp===1){bedTarget=bedT=s.bedUp;}
   if(s.doorsOpen===0||s.doorsOpen===1)openables.forEach(o=>{o.target=o.t=s.doorsOpen;});
   else if(s.doorsOpen&&typeof s.doorsOpen==='object')openables.forEach(o=>{const v=s.doorsOpen[o.id];if(v===0||v===1)o.target=o.t=v;});
