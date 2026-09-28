@@ -261,10 +261,11 @@ button.ghost{border-color:var(--line);color:var(--muted)}
     </div>
     <div id="showerColors" class="colorset">
       <p class="swlabel">Porte de douche</p>
-      <div class="seg">
-        <button data-shower="two" aria-pressed="true">2 vantaux · passage 60 cm</button>
-        <button data-shower="one" aria-pressed="false">1 vitre · passage 46 cm</button>
+      <div class="seg" style="flex-wrap:wrap">
+        <button data-shower="two" aria-pressed="true">2 coulissants · passage 60 cm</button>
+        <button data-shower="one" aria-pressed="false">1 coulissant · passage 46 cm</button>
         <button data-shower="swing" aria-pressed="false">Battante · 60 cm</button>
+        <button data-shower="swing2" aria-pressed="false">2 battants · 2 × 30 cm</button>
       </div>
       <p class="swlabel">Faïence marbre sur les murs de la douche (jusqu'à 2,02 m, hauteur de la paroi)</p>
       <div class="seg" style="flex-wrap:wrap">
@@ -378,12 +379,12 @@ button.ghost{border-color:var(--line);color:var(--muted)}
   <details class="acc" data-acc="walls">
     <summary>Couleur des murs</summary>
     <div class="seg" id="wallRoomSeg">
-      <button data-wroom="studio" aria-pressed="true">Studio</button>
+      <button data-wroom="studio" aria-pressed="true">Pièce principale</button>
       <button data-wroom="kitchen" aria-pressed="false">Cuisine</button>
       <button data-wroom="bath" aria-pressed="false">Salle de bain</button>
     </div>
     <div class="wroom" data-wroom="studio">
-      <p class="swlabel wall-all">Tous les murs du studio</p><div class="swatches" id="wallAllStudioSw"></div>
+      <p class="swlabel wall-all">Tous les murs de la pièce principale</p><div class="swatches" id="wallAllStudioSw"></div>
       <p class="swlabel">Mur du fond</p><div class="swatches" id="wallBackSw"></div>
       <p class="swlabel">Mur de gauche (portes-fenêtres)</p><div class="swatches" id="wallLeftSw"></div>
       <p class="swlabel">Mur de droite</p><div class="swatches" id="wallRightSw"></div>
@@ -395,14 +396,21 @@ button.ghost{border-color:var(--line);color:var(--muted)}
       <p class="swlabel">Mur de la fenêtre et du lave-linge</p><div class="swatches" id="wallKFarSw"></div>
       <p class="swlabel">Mur des meubles hauts (petite fenêtre)</p><div class="swatches" id="wallKRightSw"></div>
       <p class="swlabel">Mur de la porte de la salle de bain</p><div class="swatches" id="wallKDoorSw"></div>
-      <p class="swlabel">Mur de la porte-fenêtre (côté studio)</p><div class="swatches" id="wallKStudioSw"></div>
+      <p class="swlabel">Mur de la porte-fenêtre (côté pièce principale)</p><div class="swatches" id="wallKStudioSw"></div>
     </div>
     <div class="wroom" data-wroom="bath" hidden>
       <p class="swlabel wall-all">Tous les murs de la salle de bain</p><div class="swatches" id="wallAllBathSw"></div>
-      <p class="swlabel">Mur de la douche (côté studio)</p><div class="swatches" id="wallBShowerSw"></div>
+      <p class="swlabel">Mur de la douche (côté pièce principale)</p><div class="swatches" id="wallBShowerSw"></div>
       <p class="swlabel">Mur du fond (WC)</p><div class="swatches" id="wallBBackSw"></div>
       <p class="swlabel">Mur du lave-main</p><div class="swatches" id="wallBBasinSw"></div>
       <p class="swlabel">Mur de la porte</p><div class="swatches" id="wallBDoorSw"></div>
+      <p class="swlabel wall-all" style="margin-top:12px">Carrelage mural comme le sol (120 × 120 cm, jusqu'à 2,02 m)</p>
+      <div class="seg" style="flex-wrap:wrap">
+        <button data-ftile="x1" aria-pressed="false">Mur de la douche</button>
+        <button data-ftile="z1" aria-pressed="false">Mur du fond</button>
+        <button data-ftile="x0" aria-pressed="false">Mur du lave-main</button>
+        <button data-ftile="z0" aria-pressed="false">Mur de la porte</button>
+      </div>
     </div>
   </details>
 
@@ -1100,6 +1108,42 @@ const bathSidePaint=M.paint.clone();
   });
 }
 const wallMat=g=>walls.find(x=>x.g===g).mat;
+/* Carrelage mural identique au sol (120 × 120 cm), posable sur chacun des 4 murs de la salle de bain,
+   du sol jusqu'à 2,02 m (hauteur de la paroi de douche) : un carreau entier en bas, calepinage centré en largeur. */
+const bathFloorTiles={x0:false,x1:false,z0:false,z1:false};
+const bathFloorTileG={};
+{
+  const Hh=TILE_TOP,off=0.003;   // sous la faïence marbre (4 mm) quand les deux sont posées dans la douche
+  const WALLS={
+    x0:{a0:SBZ0,a1:SBZ1,holes:[]},x1:{a0:SBZ0,a1:SBZ1,holes:[]},
+    z0:{a0:SBX0,a1:SBX1,holes:[[BDX0,BDX1]]},z1:{a0:SBX0,a1:SBX1,holes:[]},
+  };
+  Object.keys(WALLS).forEach(k=>{
+    const w=WALLS[k],L=w.a1-w.a0,t=floorTiles('#e6e5e0',L,Hh,23);
+    t.offset.y=0;t.repeat.set(L/2.4,Hh/2.4);t.offset.x=tileLayout(L)[1];   // joint au sol, centré en largeur
+    const mat=new THREE.MeshStandardMaterial({map:t,roughness:0.35});
+    const wg=bathWallG[k];walls.find(x=>x.g===wg).extra.push(mat);
+    const g=new THREE.Group();g.visible=false;wg.add(g);bathFloorTileG[k]=g;
+    const cuts=[w.a0,w.a1];w.holes.forEach(h=>cuts.push(h[0],h[1]));cuts.sort((p,q)=>p-q);
+    for(let i=0;i<cuts.length-1;i++){
+      const a0=cuts[i],a1=cuts[i+1];if(a1-a0<0.005||w.holes.some(h=>a0>=h[0]-1e-6&&a1<=h[1]+1e-6))continue;
+      const geo=new THREE.PlaneGeometry(a1-a0,Hh),uv=geo.attributes.uv,sign=(k==='z0'||k==='x1')?1:-1;
+      for(let j=0;j<uv.count;j++){const lx=uv.getX(j),a=sign>0?a0+lx*(a1-a0):a1-lx*(a1-a0);uv.setX(j,(a-w.a0)/L);}
+      const m=new THREE.Mesh(geo,mat);m.receiveShadow=true;
+      const am=(a0+a1)/2,ym=Hh/2;
+      if(k==='z0')m.position.set(am,ym,SBZ0+off);
+      else if(k==='z1'){m.position.set(am,ym,SBZ1-off);m.rotation.y=Math.PI;}
+      else if(k==='x0'){m.position.set(SBX0+off,ym,am);m.rotation.y=Math.PI/2;}
+      else{m.position.set(SBX1-off,ym,am);m.rotation.y=-Math.PI/2;}
+      g.add(m);
+    }
+  });
+}
+function applyBathFloorTiles(){
+  Object.keys(bathFloorTileG).forEach(k=>bathFloorTileG[k].visible=!!bathFloorTiles[k]);
+  document.querySelectorAll('[data-ftile]').forEach(b=>b.setAttribute('aria-pressed',String(!!bathFloorTiles[b.dataset.ftile])));
+}
+document.querySelectorAll('[data-ftile]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.ftile;bathFloorTiles[k]=!bathFloorTiles[k];applyBathFloorTiles();save();}));
 // mur du studio côté cuisine (porte-fenêtre) : une couche de peinture pour qu'il ait la couleur choisie pour la cuisine
 const kitchenStudioPaint=M.paint.clone();
 {
@@ -1138,7 +1182,7 @@ const wcG=new THREE.Group(),basinG=new THREE.Group(),showerColG=new THREE.Group(
   fl.rotation.x=-Math.PI/2;fl.position.set((SBX0+SBX1)/2,0.001,(SBZ0+SBZ1)/2);fl.receiveShadow=true;kitchenG.add(fl);
   box(kitchenG,M.slab,SBX0-KT,SBX1+KT,-0.08,0,KZ1+KT,SBZ1+KT,false);
   // seuil de la porte
-  box(kitchenG,M.frame,BDX0,BDX1,0,0.006,KZ1,SBZ0,false);
+  box(kitchenG,M.kitchenFloor,BDX0,BDX1,-0.01,0.002,KZ1,SBZ0,false);   // même carrelage que la cuisine
 
   // porte coulissante (côté cuisine) sur rail ; elle glisse devant le mur de 70 cm
   box(kitchenG,M.metal,BDX0-0.04,BDX1+0.66,BDH+0.03,BDH+0.07,KZ1-0.045,KZ1,false);
@@ -1193,12 +1237,28 @@ const wcG=new THREE.Group(),basinG=new THREE.Group(),showerColG=new THREE.Group(
   box(leafD,M.showerFrame,-0.008,0.008,0.10,0.20,0,0.03,false);   // charnières
   box(leafD,M.showerFrame,-0.008,0.008,1.80,1.90,0,0.03,false);
   box(leafD,M.showerFrame,-0.024,0.024,0.95,1.25,LW-0.06,LW-0.045,false);   // poignée des deux côtés
+  //  - 2 portes battantes de 30 cm (charnières côté mur et côté partie fixe) qui s'ouvrent vers l'intérieur,
+  //    et une partie fixe de 40 cm : passage 60 cm.
+  const swing2G=new THREE.Group();showerG.add(swing2G);
+  box(swing2G,M.showerGlass,gx+0.020,gx+0.028,0.07,1.98,SWZ,SZ1-0.025,false);   // partie fixe
+  box(swing2G,M.showerFrame,gx+0.016,gx+0.032,0.07,1.98,SWZ,SWZ+0.015,false);
+  const LW2=(SWZ-SZ0-0.045)/2;
+  const leaf2=dir=>{   // repère local : charnière en z=0, le vantail s'étend vers +z (dir=1) ou −z (dir=−1)
+    const g=new THREE.Group(),za=Math.min(0,dir*LW2),zb=Math.max(0,dir*LW2);
+    box(g,M.showerGlass,-0.004,0.004,0.075,1.975,za,zb,false);
+    box(g,M.showerFrame,-0.008,0.008,0.10,0.20,dir>0?za:zb-0.03,dir>0?za+0.03:zb,false);   // charnières
+    box(g,M.showerFrame,-0.008,0.008,1.80,1.90,dir>0?za:zb-0.03,dir>0?za+0.03:zb,false);
+    box(g,M.showerFrame,-0.024,0.024,0.95,1.25,dir*(LW2-0.05)-0.008,dir*(LW2-0.05)+0.008,false);   // poignée
+    return g;
+  };
+  const leafE=leaf2(1),leafF=leaf2(-1);
+  leafE.position.set(gx+0.004,0,SZ0+0.03);leafF.position.set(gx+0.004,0,SWZ-0.005);swing2G.add(leafE,leafF);
   box(showerG,M.showerFrame,SX0,SX0+0.05,1.98,2.02,SZ0,SZ1,false);   // rail haut
   box(showerG,M.showerFrame,SX0,SX0+0.05,0.05,0.07,SZ0,SZ1,false);   // rail bas
   box(showerG,M.showerFrame,SX0,SX0+0.05,0.05,2.02,SZ0,SZ0+0.025,false);   // montants muraux
   box(showerG,M.showerFrame,SX0,SX0+0.05,0.05,2.02,SZ1-0.025,SZ1,false);
-  markOpenable(openable('shower',e=>{leafA.position.z=0.56*e;leafB.position.z=0.28*e;leafC.position.z=0.46*e;leafD.rotation.y=Math.PI/2*0.9*e;},()=>[leafA,leafB,leafC,leafD]),leafA,leafB,leafC,leafD);
-  showerModels={two:twoG,one:oneG,swing:swingG};
+  markOpenable(openable('shower',e=>{leafA.position.z=0.56*e;leafB.position.z=0.28*e;leafC.position.z=0.46*e;leafD.rotation.y=Math.PI/2*0.9*e;leafE.rotation.y=Math.PI/2*0.9*e;leafF.rotation.y=-Math.PI/2*0.9*e;},()=>[leafA,leafB,leafC,leafD,leafE,leafF]),leafA,leafB,leafC,leafD,leafE,leafF);
+  showerModels={two:twoG,one:oneG,swing:swingG,swing2:swing2G};
   showerItem={id:'shower',name:'Douche',obj:showerG,fixed:true,noRotate:true,info:'100 × 70 cm, bac blanc, colonne de douche, porte coulissante en verre de 2 × 30 cm (clique sur la porte pour l\u2019ouvrir)'};
   showerG.userData.item=showerItem;
 
@@ -1824,7 +1884,7 @@ function applyFanLamp(){
 function applyShowerType(){
   Object.keys(showerModels).forEach(k=>showerModels[k].visible=showerType===k);
   showerItem.info='100 × 70 cm, bac blanc, colonne de douche, '+
-    (showerType==='one'?'porte coulissante en verre à une vitre (passage 46 cm)':showerType==='swing'?'porte battante en verre de 60 cm qui s\u2019ouvre vers l\u2019intérieur de la douche':'porte coulissante en verre de 2 × 30 cm (passage 60 cm)')+' ; clique sur la porte pour l\u2019ouvrir';
+    (showerType==='one'?'porte coulissante en verre à une vitre (passage 46 cm)':showerType==='swing'?'porte battante en verre de 60 cm qui s\u2019ouvre vers l\u2019intérieur de la douche':showerType==='swing2'?'2 portes battantes en verre de 30 cm qui s\u2019ouvrent vers l\u2019intérieur (passage 60 cm)':'porte coulissante en verre de 2 × 30 cm (passage 60 cm)')+' ; clique sur la porte pour l\u2019ouvrir';
   document.querySelectorAll('[data-shower]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.shower===showerType)));
   if(selected===showerItem)showSel(showerItem);
 }
@@ -2461,7 +2521,7 @@ document.querySelectorAll('[data-show]').forEach(b=>b.addEventListener('click',(
   const k=b.dataset.show;showState[k]=!showState[k];applyShow();save();
 }));
 function getState(){
-  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),tileTone,dayLevel,sitter:sitterOn,dimsOn,wcCorner,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
+  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),bathFloorTiles:Object.assign({},bathFloorTiles),tileTone,dayLevel,sitter:sitterOn,dimsOn,wcCorner,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
   items.forEach(it=>o.items[it.id]={x:it.obj.position.x,z:it.obj.position.z,r:it.obj.rotation.y});
   return JSON.parse(JSON.stringify(o));
 }
@@ -2509,8 +2569,9 @@ function loadInto(s){
   if(s&&typeof s.kCeilOn==='boolean')kCeilOn=s.kCeilOn;
   if(s&&typeof s.kUnderOn==='boolean')kUnderOn=s.kUnderOn;
   if(s&&typeof s.bathOn==='boolean')bathOn=s.bathOn;
-  if(s&&['one','two','swing'].includes(s.showerType))showerType=s.showerType;
+  if(s&&['one','two','swing','swing2'].includes(s.showerType))showerType=s.showerType;
   if(s&&s.bathTiles)Object.keys(bathTiles).forEach(k=>{bathTiles[k]=!!s.bathTiles[k];});
+  if(s&&s.bathFloorTiles)Object.keys(bathFloorTiles).forEach(k=>{bathFloorTiles[k]=!!s.bathFloorTiles[k];});
   if(s&&typeof s.tileTone==='number')tileTone=Math.max(-50,Math.min(50,s.tileTone));
   if(s&&typeof s.dayLevel==='number')dayLevel=Math.max(30,Math.min(160,s.dayLevel));
   if(s&&typeof s.walkH==='number')setWalkHeight(s.walkH);
@@ -2549,7 +2610,7 @@ document.getElementById('bedSpotBtn').addEventListener('click',()=>{bedSpotsOn=!
 document.getElementById('kCeilBtn').addEventListener('click',()=>{kCeilOn=!kCeilOn;applyKitchenLights();save();});
 document.getElementById('kUnderBtn').addEventListener('click',()=>{kUnderOn=!kUnderOn;applyKitchenLights();save();});
 document.getElementById('bathBtn').addEventListener('click',()=>{bathOn=!bathOn;applyKitchenLights();save();});
-applyKitchenLights();syncDims();applyShowerType();applyBathTiles();applyTileTone();
+applyKitchenLights();syncDims();applyShowerType();applyBathTiles();applyBathFloorTiles();applyTileTone();
 applyBedSpots();
 document.querySelectorAll('[data-amb]').forEach(b=>b.addEventListener('click',()=>{ambiance=b.dataset.amb;applyAmbiance();save();}));
 document.getElementById('dayLevel').addEventListener('input',e=>{dayLevel=Math.max(30,Math.min(160,+e.target.value||100));applyAmbiance();});
@@ -2608,7 +2669,7 @@ function applyPlan(state){
   buildWardrobe();wardInfo();buildSofa();sofaInfo();buildTable();poseTable(tableT);tableInfo();buildFan();fanItem.w=fanItem.d=fanSize.d;
   if(s.sofaBack===1)sofaBack.rotation.x=-Math.PI/2;
   applyShow();applyFloor();applyWardColor();Object.keys(colors).forEach(applyColor);applyPillows();buildSpots();applyFan();applyFanLamp();applyBedSpots();applyAmbiance();applyEntry();
-  syncFreeze();applyKitchenLights();syncDims();applyShowerType();applyBathTiles();applyTileTone();syncShelfInputs();syncKWin2Inputs();applySitter();syncDimsBtn();
+  syncFreeze();applyKitchenLights();syncDims();applyShowerType();applyBathTiles();applyBathFloorTiles();applyTileTone();syncShelfInputs();syncKWin2Inputs();applySitter();syncDimsBtn();
   syncBedDoorBtns();syncTableBtn();syncSofaInputs();syncTableInputs();syncWardInputs();syncSofaBackBtn();fanIn.value=Math.round(fanSize.d*100);
   items.forEach(it=>clampItem(it));
   select(null);save();
