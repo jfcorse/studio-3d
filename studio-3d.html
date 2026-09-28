@@ -938,9 +938,9 @@ function frenchLeaf(w,h,side){   // side : signe de la face côté pièce en z l
   box(g,M.metal,w-0.05,w-0.03,1.02,1.18,-t/2-0.03,t/2+0.03);   // crémone
   return g;
 }
-function frenchWindow(z0){
+function frenchWindow(z0,tiledSill){
   const z1=z0+1.00,fw=0.06,ft=0.07,fx0=FX-ft/2,fx1=FX+ft/2;
-  box(scene,M.sill,-TL,0.005,0,0.015,z0,z1,false);          // seuil
+  if(!tiledSill)box(scene,M.sill,-TL,0.005,0,0.015,z0,z1,false);          // seuil (côté cuisine : carrelé, posé avec le sol de la cuisine)
   box(scene,M.frame,fx0,fx1,0,OH,z0,z0+fw);                // dormant
   box(scene,M.frame,fx0,fx1,0,OH,z1-fw,z1);
   box(scene,M.frame,fx0,fx1,OH-fw,OH,z0,z1);
@@ -954,7 +954,7 @@ function frenchWindow(z0){
   markOpenable(openable('fw'+z0,swing([a,b]),()=>[a,b]),a,b);
 }
 frenchWindow(0.48);
-frenchWindow(2.64);
+frenchWindow(2.64,true);
 
 /* ---------- Pièce voisine : la cuisine, derrière la porte-fenêtre de gauche (près de l'entrée) ---------- */
 // En entrant par la porte-fenêtre : mur de droite 1,65 m (profondeur), mur d'en face 2,00 m (largeur).
@@ -983,10 +983,21 @@ function floorTiles(base,Lx,Lz,seed){
   t.repeat.set(rx,rz);t.offset.set(ox,oz);t.anisotropy=renderer.capabilities.getMaxAnisotropy();t.encoding=THREE.sRGBEncoding;
   return t;
 }
-const tomette=base=>floorTiles(base,KD,KZ1-KZ0,19);   // sol de la cuisine (couleur réglable)
+const tomette=base=>{const t=floorTiles(base,KD,KZ1-KZ0,19);t.repeat.set(1,1);t.offset.set(0,0);return t;};   // sol de la cuisine (couleur réglable)
+/* Pose continue : cuisine, seuils et salle de bain partagent la même grille de carreaux de 120 cm,
+   calée sur un joint au centre de la cuisine. Chaque morceau de sol reçoit des UV en coordonnées du monde. */
+const TILE_GX=(KX0+KX1)/2,TILE_GZ=(KZ0+KZ1)/2;
+function tiledFloor(parent,mat,x0,x1,z0,z1,y){
+  const geo=new THREE.PlaneGeometry(x1-x0,z1-z0),uv=geo.attributes.uv,pos=geo.attributes.position;
+  for(let i=0;i<uv.count;i++){
+    const wx=(x0+x1)/2+pos.getX(i),wz=(z0+z1)/2-pos.getY(i);   // le plan est couché : y local → −z
+    uv.setXY(i,(wx-TILE_GX)/2.4,-(wz-TILE_GZ)/2.4);            // la texture contient 2 × 2 carreaux
+  }
+  const m=new THREE.Mesh(geo,mat);m.rotation.x=-Math.PI/2;m.position.set((x0+x1)/2,y,(z0+z1)/2);m.receiveShadow=true;parent.add(m);return m;
+}
 M.kitchenFloor=new THREE.MeshStandardMaterial({map:tomette('#8a4a33'),roughness:0.55});
-const kf=new THREE.Mesh(new THREE.PlaneGeometry(KD,KZ1-KZ0),M.kitchenFloor);
-kf.rotation.x=-Math.PI/2;kf.position.set((KX0+KX1)/2,0.001,(KZ0+KZ1)/2);kf.receiveShadow=true;kitchenG.add(kf);
+tiledFloor(kitchenG,M.kitchenFloor,KX1,KX0,KZ0,KZ1,0.001);
+tiledFloor(kitchenG,M.kitchenFloor,-TL,0,2.64,3.64,0.002);   // seuil de la porte-fenêtre pièce principale ↔ cuisine, pose continue
 // murs de la cuisine (ils s'effacent eux aussi côté caméra)
 /* Mur de la cuisine en face de la porte : fenêtre 92 × 129 cm (4 cm de mur à sa gauche en entrant) et, dessous,
    un renfoncement de 65 × 86 cm sur 25 cm de profondeur (pour le lave-linge). Mur de 45 cm d'épaisseur ;
@@ -1006,7 +1017,7 @@ const kitchenFarG=wall(-1,0,(g,m)=>{
 });
 kitchenWalls.push(kitchenFarG);
 box(kitchenG,M.slab,KX1-KFT,KX0,-0.08,0,KZ0-KT,KZ1+KT,false);
-box(kitchenG,M.kitchenFloor,KX1-NICHED,KX1,-0.01,0.001,NICHEZ0,NICHEZ1,false);   // sol du renfoncement
+tiledFloor(kitchenG,M.kitchenFloor,KX1-NICHED,KX1,NICHEZ0,NICHEZ1,0.001);   // sol du renfoncement
 /* Mur de droite en entrant : petite fenêtre (45 × 35 cm par défaut) entre les deux meubles hauts de la cuisine,
    taille et couleur du cadre réglables (clic sur la fenêtre). Le mur est reconstruit autour de l'ouverture. */
 const kWin2={w:0.45,h:0.35,y:1.60,x:(KX0+KX1)/2+0.0125};   // x : milieu de l'espace entre les meubles hauts (cuisine à sa place d'origine)
@@ -1188,12 +1199,11 @@ let showerType='two';   // porte de douche : 'two' (2 vantaux, passage 60 cm), '
 const wcG=new THREE.Group(),basinG=new THREE.Group(),showerColG=new THREE.Group();   // WC et lave-main, déplaçables dans la salle de bain
 {
   // sol carrelé
-  const t=floorTiles('#e6e5e0',SBX1-SBX0,SBZ1-SBZ0,23);   // carrelage 120 × 120 cm
-  const fl=new THREE.Mesh(new THREE.PlaneGeometry(SBX1-SBX0,SBZ1-SBZ0),new THREE.MeshStandardMaterial({map:t,roughness:0.35}));
-  fl.rotation.x=-Math.PI/2;fl.position.set((SBX0+SBX1)/2,0.001,(SBZ0+SBZ1)/2);fl.receiveShadow=true;kitchenG.add(fl);
+  const t=floorTiles('#e6e5e0',SBX1-SBX0,SBZ1-SBZ0,23);t.repeat.set(1,1);t.offset.set(0,0);   // carrelage 120 × 120 cm, grille continue avec la cuisine
+  tiledFloor(kitchenG,new THREE.MeshStandardMaterial({map:t,roughness:0.35}),SBX0,SBX1,SBZ0,SBZ1,0.001);
   box(kitchenG,M.slab,SBX0-KT,SBX1+KT,-0.08,0,KZ1+KT,SBZ1+KT,false);
   // seuil de la porte
-  box(kitchenG,M.kitchenFloor,BDX0,BDX1,-0.01,0.002,KZ1,SBZ0,false);   // même carrelage que la cuisine
+  tiledFloor(kitchenG,M.kitchenFloor,BDX0,BDX1,KZ1,SBZ0,0.002);   // seuil : même carrelage que la cuisine, pose continue
 
   // porte coulissante (côté cuisine) sur rail ; elle glisse devant le mur de 70 cm
   box(kitchenG,M.metal,BDX0-0.04,BDX1+0.66,BDH+0.03,BDH+0.07,KZ1-0.045,KZ1,false);
