@@ -290,7 +290,7 @@ button.ghost{border-color:var(--line);color:var(--muted)}
       <p class="swlabel">Couleur de la planche</p><div class="swatches" id="cshelfBoardSw"></div>
     </div>
     <div id="shelfColors" class="colorset">
-      <div class="actions" style="margin:0 0 10px"><button id="shelfFoldBtn">Replier / déplier le rabat</button></div>
+      <div class="actions" style="margin:0 0 10px"><button id="shelfFoldBtn">Rabattre / relever le rabat</button></div>
       <p class="swlabel">Couleur de la tablette</p><div class="swatches" id="shelfSw"></div>
     </div>
     <div class="sizes" id="kwin2Sizes">
@@ -1270,7 +1270,8 @@ M.chromeFix=M.chrome.clone();   // bonde, boutons du WC, hublot et bouton du lav
 M.bathDoor=new THREE.MeshStandardMaterial({color:0xf1f0ec,roughness:0.45});
 M.showerFrame=new THREE.MeshStandardMaterial({color:0xc8ccd0,roughness:0.3,metalness:0.3});
 M.showerGlass=new THREE.MeshStandardMaterial({color:0xdcebee,roughness:0.05,transparent:true,opacity:0.22,depthWrite:false});
-M.basinRed=new THREE.MeshStandardMaterial({color:0xb3262e,roughness:0.4});
+M.basinRed=new THREE.MeshStandardMaterial({color:0xb3262e,roughness:0.18});   // porte laquée brillante
+M.basinWood=new THREE.MeshStandardMaterial({map:woodTex('#5a4d44'),roughness:0.7});   // caisson et plateaux : bois foncé veiné
 M.bathSpotLens=new THREE.MeshStandardMaterial({color:0xfafafa,emissive:0xffe8c4,emissiveIntensity:0});
 const bathSpots=[];
 const bathCeilG=new THREE.Group();kitchenG.add(bathCeilG);   // spots de la salle de bain : descendent avec le faux plafond
@@ -1406,8 +1407,30 @@ const wcG=new THREE.Group(),basinG=new THREE.Group(),showerColG=new THREE.Group(
   wcG.children.forEach(c=>c.position.z-=0.025);   // 36 × 49 cm depuis le mur : repère centré (−24,5 → +24,5 cm)
 
   // lave-main 30 × 30 cm dans l'angle à droite en entrant : meuble rouge, lavabo blanc encastré, robinet — déplaçable
-  // repère local : centre du meuble, robinet dans l'angle arrière (−x, −z)
-  box(basinG,M.basinRed,-0.15,0.15,0.12,0.80,-0.15,0.15);
+  // repère local : centre du meuble, robinet dans l'angle arrière (−x, −z) ; façade en +x (face au lave-main, gauche = +z)
+  // caisson ouvert en bois foncé : deux côtés pleine hauteur, fond seulement jusqu'au plateau, plateau à mi-hauteur
+  // et fond du meuble arrondis à l'avant côté charnière ; porte laquée rouge articulée à gauche, poignée porte-serviette
+  {
+    const Y0=0.03,Y1=0.80,FX=0.132,T=0.016,IZ=0.15-T;
+    box(basinG,M.basinWood,-0.15,FX,Y0,Y1,-0.15,-IZ);            // côté droit
+    box(basinG,M.basinWood,-0.15,FX,Y0,Y1,IZ,0.15);              // côté gauche (charnières)
+    box(basinG,M.basinWood,-0.15,-0.15+T,Y0,0.50,-IZ,IZ);        // fond bas
+    const plank=y=>{   // planche à l'angle avant gauche arrondi (repère de la forme : x, −z)
+      const R=0.08,x0=-0.15+T,x1=FX-0.004,sh=new THREE.Shape();
+      sh.moveTo(x0,IZ);sh.lineTo(x1,IZ);sh.lineTo(x1,-IZ+R);sh.absarc(x1-R,-IZ+R,R,0,-Math.PI/2,true);sh.lineTo(x0,-IZ);sh.closePath();
+      const m=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:T,bevelEnabled:false,curveSegments:12}),M.basinWood);
+      m.rotation.x=-Math.PI/2;m.position.y=y;m.castShadow=m.receiveShadow=true;basinG.add(m);
+    };
+    plank(Y0);plank(0.42);
+    cyl(basinG,M.chrome,0.02,0.62,0.815,0.02,0.016);                              // bonde et siphon
+    box(basinG,M.chrome,-0.15+T,0.035,0.60,0.625,0.008,0.032,false);             // évacuation vers le mur
+    // porte : charnière sur l'arête avant gauche, s'ouvre vers l'extérieur jusqu'à 90° (contre un mur éventuel, sans le traverser)
+    const pivot=new THREE.Group();pivot.position.set(0.15,0,0.15);basinG.add(pivot);
+    box(pivot,M.basinRed,-0.018,0,Y0+0.005,Y1-0.005,-0.30,-0.002);
+    [-0.08,-0.27].forEach(z=>box(pivot,M.chrome,0,0.03,0.69,0.71,z-0.006,z+0.006,false));   // pieds de la poignée
+    box(pivot,M.chrome,0.026,0.036,0.688,0.712,-0.285,-0.065,false);                           // poignée porte-serviette
+    markOpenable(openable('basinDoor',e=>{pivot.rotation.y=-Math.PI/2*e;},()=>[pivot]),pivot);
+  }
   box(basinG,M.ceramic,-0.15,0.15,0.80,0.84,-0.15,0.15);
   const sink=new THREE.Mesh(new THREE.CylinderGeometry(0.105,0.09,0.03,24),new THREE.MeshStandardMaterial({color:0xe4e4e2,roughness:0.2}));
   sink.position.set(0.02,0.83,0.02);basinG.add(sink);
@@ -2265,30 +2288,44 @@ washerItem.niche={x0:KX1-NICHED,z0:NICHEZ0,z1:NICHEZ1,h:NICHEH};   // peut entre
 M.shelf=new THREE.MeshStandardMaterial({color:0xcfae80,roughness:0.45});
 const shelfSize={w:0.65,d:0.60,y:0.86,f:0.30};   // y : dessous de la tablette (m) ; f : longueur du rabat côté pièce (0 = pas de rabat)
 const shelfG=new THREE.Group();
-// rabat : rallonge avant articulée qui se replie à plat sur la tablette (clic dessus ou bouton « Replier »)
+// rabat : bout de la longueur articulé qui se rabat vers le bas (clic dessus ou bouton « Rabattre »)
 const shelfFlap=new THREE.Group();
-const shelfFlapLen=()=>Math.max(0,Math.min(shelfSize.f,0.70,shelfSize.d));   // replié, il tient sur la partie fixe
+const shelfFlapLen=()=>Math.max(0,Math.min(shelfSize.f,0.70,shelfSize.w-0.10));   // au bout de la longueur, 10 cm de partie fixe au moins
 function buildShelf(){
   while(shelfG.children.length){const c=shelfG.children.pop();if(c!==shelfFlap)c.geometry&&c.geometry.dispose();}
   while(shelfFlap.children.length){const c=shelfFlap.children.pop();c.geometry&&c.geometry.dispose();}
   // repère local : longueur en x, profondeur en z (mur en −z, pièce en +z) ; 2,5 cm d'épaisseur, par défaut juste au-dessus du lave-linge (85 cm)
-  // rabat : rallonge articulée sur l'arête avant du dessus ; replié, il se couche à plat sur la tablette
-  const w=shelfSize.w/2,z0=-shelfSize.d/2,z1=shelfSize.d/2,f=shelfFlapLen(),y0=shelfSize.y,y1=y0+0.025;
-  box(shelfG,M.shelf,-w,w,y0,y1,z0,z1);   // partie fixe
+  // rabat : dernier morceau de la longueur (côté +x, à l'opposé du mur de gauche), articulé dessous ; il se rabat vers le bas
+  const w=shelfSize.w/2,z0=-shelfSize.d/2,z1=shelfSize.d/2,f=shelfFlapLen(),xh=w-f,y0=shelfSize.y,y1=y0+0.025;
+  box(shelfG,M.shelf,-w,f>0?xh-0.001:w,y0,y1,z0,z1);   // partie fixe
   if(f>0){
-    shelfFlap.position.set(0,y1,z1+0.001);   // charnière sur l'arête avant du dessus
-    box(shelfFlap,M.shelf,-w,w,-0.025,0,0.001,f);
-    box(shelfFlap,M.metal,-w+0.02,w-0.02,0,0.002,-0.012,0.012,false);   // charnière piano
+    shelfFlap.position.set(xh,y0,0);   // charnière sous la tablette, en travers
+    box(shelfFlap,M.shelf,0,f,0,0.025,z0,z1);
+    box(shelfFlap,M.metal,-0.012,0.012,-0.002,0,z0+0.04,z0+0.10,false);box(shelfFlap,M.metal,-0.012,0.012,-0.002,0,z1-0.10,z1-0.04,false);   // charnières
     shelfG.add(shelfFlap);
   }
 }
 buildShelf();
-// replié : le rabat bascule par-dessus et se couche sur la tablette (demi-tour autour de la charnière)
-markOpenable(openable('shelfFlap',e=>{shelfFlap.rotation.x=-Math.PI*e;},()=>shelfFlapLen()>0?[shelfFlap]:[]),shelfFlap);
+// angle maximal du rabat : il pend à la verticale, ou s'appuie sur le lave-linge s'il est juste dessous
+const _fb=new THREE.Box3(),_wb=new THREE.Box3(),_v3=new THREE.Vector3();
+function shelfFlapMax(){
+  const f=shelfFlapLen();if(!f)return 0;
+  let below=0;
+  if(washerG.visible&&shelfG.visible){
+    shelfG.updateMatrixWorld();_fb.makeEmpty();
+    const w=shelfSize.w/2,d=shelfSize.d/2;
+    [[w-f,-d],[w,-d],[w-f,d],[w,d]].forEach(([x,z])=>_fb.expandByPoint(_v3.set(x,0,z).applyMatrix4(shelfG.matrixWorld)));
+    _wb.setFromObject(washerG);
+    if(_fb.max.x>_wb.min.x&&_fb.min.x<_wb.max.x&&_fb.max.z>_wb.min.z&&_fb.min.z<_wb.max.z&&_wb.max.y<shelfSize.y)below=_wb.max.y;
+  }
+  const drop=shelfSize.y-below-0.005;
+  return drop>=f?Math.PI/2:Math.asin(Math.max(0,drop)/f);
+}
+markOpenable(openable('shelfFlap',e=>{shelfFlap.rotation.z=e>0?-shelfFlapMax()*e:0;},()=>shelfFlapLen()>0?[shelfFlap]:[]),shelfFlap);
 const shelfItem=addItem('shelf','Tablette au-dessus du lave-linge',shelfG,shelfSize.w,shelfSize.d,{x:KX1-NICHED+shelfSize.d/2,z:(NICHEZ0+NICHEZ1)/2,r:Math.PI/2},'');
 shelfItem.bounds={x0:KX1,x1:KX0,z0:KZ0,z1:KZ1};
 shelfItem.niche={x0:KX1-NICHED,z0:NICHEZ0,z1:NICHEZ1,h:NICHEH};
-function shelfInfo(){shelfItem.info=Math.round(shelfSize.w*100)+' × '+Math.round(shelfSize.d*100)+' cm, dessus à '+Math.round((shelfSize.y+0.025)*100)+' cm du sol'+(shelfFlapLen()>0?', rabat de '+Math.round(shelfFlapLen()*100)+' cm (clique dessus pour le replier sur la tablette ou le déplier)':'');}
+function shelfInfo(){shelfItem.info=Math.round(shelfSize.w*100)+' × '+Math.round(shelfSize.d*100)+' cm, dessus à '+Math.round((shelfSize.y+0.025)*100)+' cm du sol'+(shelfFlapLen()>0?', rabat de '+Math.round(shelfFlapLen()*100)+' cm au bout (clique dessus pour le rabattre ou le relever)'+(shelfFlapMax()<Math.PI/2-0.01?' ; rabattu, il s\u2019appuie sur le lave-linge : remonte la tablette pour qu\u2019il pende':''):'');}
 shelfInfo();
 /* Étagère ouverte d'angle : étagères rectangulaires, adossées au mur du fond de l'angle, tenues à gauche par un
    panneau contre l'autre mur et fixées au mur ; côté droit libre, sans montant. Dans l'angle de la cuisine devant
@@ -2567,7 +2604,7 @@ function setWcCorner(on){
   if(selected===wcItem){selBox.setFromObject(wcG);showSel(wcItem);}
 }
 document.querySelectorAll('[data-wcmode]').forEach(b=>b.addEventListener('click',()=>{setWcCorner(b.dataset.wcmode==='corner');save();}));
-const basinItem=addItem('basin','Lave-main',basinG,0.30,0.30,{x:SBX0+0.15,z:SBZ0+0.15,r:0},'30 × 30 cm, meuble sous le lavabo blanc encastré, robinet');
+const basinItem=addItem('basin','Lave-main',basinG,0.30,0.30,{x:SBX0+0.15,z:SBZ0+0.15,r:0},'30 × 30 cm, lavabo blanc, meuble à porte rouge ouvrant à gauche (clique dessus pour l\u2019ouvrir), plateau à mi-hauteur');
 basinItem.bounds=BATH_FREE;
 
 /* ---------- Couleurs : sol et grande armoire ---------- */
