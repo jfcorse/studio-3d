@@ -1408,12 +1408,12 @@ const wcG=new THREE.Group(),basinG=new THREE.Group(),showerColG=new THREE.Group(
 
   // lave-main 30 × 30 cm dans l'angle à droite en entrant : meuble rouge, lavabo blanc encastré, robinet — déplaçable
   // repère local : centre du meuble, robinet dans l'angle arrière (−x, −z) ; façade en +x (face au lave-main, gauche = +z)
-  // caisson ouvert en bois foncé : deux côtés pleine hauteur, fond seulement jusqu'au plateau, plateau à mi-hauteur
-  // et fond du meuble arrondis à l'avant côté charnière ; porte laquée rouge articulée à gauche, poignée porte-serviette
+  // caisson ouvert en bois foncé : côtés pleine hauteur (le gauche derrière le volet rouge), fond seulement jusqu'au plateau, plateau à mi-hauteur
+  // et fond du meuble arrondis à l'avant côté charnière ; porte accordéon laquée rouge (côté gauche + façade), poignée porte-serviette
   {
-    const Y0=0.03,Y1=0.80,FX=0.132,T=0.016,IZ=0.15-T;
+    const Y0=0.03,Y1=0.80,FX=0.132,T=0.016,IZ=0.15-T,TH0=0.018;
     box(basinG,M.basinWood,-0.15,FX,Y0,Y1,-0.15,-IZ);            // côté droit
-    box(basinG,M.basinWood,-0.15,FX,Y0,Y1,IZ,0.15);              // côté gauche (charnières)
+    box(basinG,M.basinWood,-0.15+T,FX,Y0,Y1,IZ-TH0,0.15-TH0);     // côté gauche, derrière le volet rouge
     box(basinG,M.basinWood,-0.15,-0.15+T,Y0,0.50,-IZ,IZ);        // fond bas
     const plank=y=>{   // planche à l'angle avant gauche arrondi (repère de la forme : x, −z)
       const R=0.08,x0=-0.15+T,x1=FX-0.004,sh=new THREE.Shape();
@@ -1424,12 +1424,24 @@ const wcG=new THREE.Group(),basinG=new THREE.Group(),showerColG=new THREE.Group(
     plank(Y0);plank(0.42);
     cyl(basinG,M.chrome,0.02,0.62,0.815,0.02,0.016);                              // bonde et siphon
     box(basinG,M.chrome,-0.15+T,0.035,0.60,0.625,0.008,0.032,false);             // évacuation vers le mur
-    // porte : charnière sur l'arête avant gauche, s'ouvre vers l'extérieur jusqu'à 90° (contre un mur éventuel, sans le traverser)
-    const pivot=new THREE.Group();pivot.position.set(0.15,0,0.15);basinG.add(pivot);
-    box(pivot,M.basinRed,-0.018,0,Y0+0.005,Y1-0.005,-0.30,-0.002);
-    [-0.08,-0.27].forEach(z=>box(pivot,M.chrome,0,0.03,0.69,0.71,z-0.006,z+0.006,false));   // pieds de la poignée
-    box(pivot,M.chrome,0.026,0.036,0.688,0.712,-0.285,-0.065,false);                           // poignée porte-serviette
-    markOpenable(openable('basinDoor',e=>{pivot.rotation.y=-Math.PI/2*e;},()=>[pivot]),pivot);
+    // porte accordéon (comme sur les photos) : deux volets rouges de 30 cm. Le volet de côté (à gauche) est articulé
+    // sur l'arête arrière, le volet de façade lui est articulé dans l'angle avant gauche, et son bout libre glisse le
+    // long de la façade vers la gauche : l'angle sort en V sur le côté gauche (26 cm au plus) et le devant se dégage
+    // entièrement, sans rien avancer au-delà de la façade.
+    const P=0.30,TH=0.018,pS=new THREE.Group(),pF=new THREE.Group();basinG.add(pS,pF);
+    box(pS,M.basinRed,0.001,P-0.001,Y0+0.005,Y1-0.005,-TH,0);             // volet de côté
+    box(pF,M.basinRed,-TH,0,Y0+0.005,Y1-0.005,-P+0.001,-0.001);           // volet de façade
+    [-0.08,-0.26].forEach(z=>box(pF,M.chrome,0,0.03,0.69,0.71,z-0.006,z+0.006,false));   // pieds de la poignée
+    box(pF,M.chrome,0.026,0.036,0.688,0.712,-0.275,-0.065,false);                        // poignée porte-serviette
+    const poseBasinDoor=e=>{
+      const bx=-0.15,bz=0.15,rx=0.15,rz=-0.15+0.29*e;                      // charnière arrière et bout libre (sur la façade)
+      const dx=rx-bx,dz=rz-bz,d=Math.hypot(dx,dz),h=Math.sqrt(Math.max(0,P*P-d*d/4));
+      const fx=(bx+rx)/2-dz/d*h,fz=(bz+rz)/2+dx/d*h;                      // angle des deux volets
+      pS.position.set(bx,0,bz);pS.rotation.y=Math.atan2(-(fz-bz),fx-bx);
+      pF.position.set(fx,0,fz);pF.rotation.y=Math.atan2(-(rx-fx),-(rz-fz));
+    };
+    poseBasinDoor(0);
+    markOpenable(openable('basinDoor',poseBasinDoor,()=>[pS,pF]),pS,pF);
   }
   box(basinG,M.ceramic,-0.15,0.15,0.80,0.84,-0.15,0.15);
   const sink=new THREE.Mesh(new THREE.CylinderGeometry(0.105,0.09,0.03,24),new THREE.MeshStandardMaterial({color:0xe4e4e2,roughness:0.2}));
@@ -2604,7 +2616,7 @@ function setWcCorner(on){
   if(selected===wcItem){selBox.setFromObject(wcG);showSel(wcItem);}
 }
 document.querySelectorAll('[data-wcmode]').forEach(b=>b.addEventListener('click',()=>{setWcCorner(b.dataset.wcmode==='corner');save();}));
-const basinItem=addItem('basin','Lave-main',basinG,0.30,0.30,{x:SBX0+0.15,z:SBZ0+0.15,r:0},'30 × 30 cm, lavabo blanc, meuble à porte rouge ouvrant à gauche (clique dessus pour l\u2019ouvrir), plateau à mi-hauteur');
+const basinItem=addItem('basin','Lave-main',basinG,0.30,0.30,{x:SBX0+0.15,z:SBZ0+0.15,r:0},'30 × 30 cm, lavabo blanc, meuble à porte accordéon rouge (clique dessus pour l\u2019ouvrir), plateau à mi-hauteur');
 basinItem.bounds=BATH_FREE;
 
 /* ---------- Couleurs : sol et grande armoire ---------- */
