@@ -246,12 +246,13 @@ button.ghost{border-color:var(--line);color:var(--muted)}
       <label>Profondeur (cm)<input id="shelfD" type="number" min="20" max="80" step="5" inputmode="numeric"></label>
     </div>
     <div class="sizes" id="cshelfSizes">
-      <label>Côté (cm)<input id="cshelfR" type="number" min="25" max="60" step="5" inputmode="numeric"></label>
+      <label>Longueur (cm)<input id="cshelfW" type="number" min="30" max="100" step="5" inputmode="numeric"></label>
+      <label>Profondeur (cm)<input id="cshelfD" type="number" min="15" max="50" step="5" inputmode="numeric"></label>
       <label>Hauteur (cm)<input id="cshelfH" type="number" min="60" max="220" step="5" inputmode="numeric"></label>
       <label>Étagères<input id="cshelfN" type="number" min="2" max="8" step="1" inputmode="numeric"></label>
     </div>
     <div id="cshelfColors" class="colorset">
-      <p class="swlabel">Couleur de l'étagère d'angle</p><div class="swatches" id="cshelfSw"></div>
+      <p class="swlabel">Couleur de l'étagère</p><div class="swatches" id="cshelfSw"></div>
     </div>
     <div id="shelfColors" class="colorset">
       <p class="swlabel">Couleur de la tablette</p><div class="swatches" id="shelfSw"></div>
@@ -2090,46 +2091,50 @@ shelfItem.bounds={x0:KX1,x1:KX0,z0:KZ0,z1:KZ1};
 shelfItem.niche={x0:KX1-NICHED,z0:NICHEZ0,z1:NICHEZ1,h:NICHEH};
 function shelfInfo(){shelfItem.info=Math.round(shelfSize.w*100)+' × '+Math.round(shelfSize.d*100)+' cm, à 88 cm du sol';}
 shelfInfo();
-/* Étagère ouverte d'angle : étagères en quart de rond sur trois montants fins, dans l'angle de la cuisine
-   devant la porte coulissante ouverte (6 cm de recul pour la porte). Taille, hauteur, nombre d'étagères et couleur réglables ;
-   elle se cale dans l'angle de la cuisine le plus proche et peut être supprimée (touche Suppr). */
+/* Étagère ouverte d'angle : étagères rectangulaires, adossées au mur du fond de l'angle, tenues à gauche par un
+   panneau contre l'autre mur et fixées au mur ; côté droit libre, sans montant. Dans l'angle de la cuisine devant
+   la porte coulissante ouverte (6 cm de recul pour la porte). Longueur, profondeur, hauteur, nombre d'étagères et
+   couleur réglables ; elle se cale dans l'angle de la cuisine le plus proche et peut être supprimée (touche Suppr). */
 M.cshelf=new THREE.MeshStandardMaterial({color:0xf1efe9,roughness:0.5});
-const cshelf={r:0.35,h:1.80,n:5};
+const cshelf={w:0.50,d:0.30,h:1.80,n:5};
 const cshelfG=new THREE.Group();
 function buildCShelf(){
   while(cshelfG.children.length){const c=cshelfG.children.pop();c.geometry&&c.geometry.dispose();}
-  const R=cshelf.r,o=R/2;   // repère centré : l'angle est en (+R/2, +R/2), les étagères partent vers −x et −z
+  // repère centré : dos le long de z = +d/2 (mur), panneau de gauche contre x = +w/2 (autre mur), côté droit (x = −w/2) libre
+  const W=cshelf.w,Dp=cshelf.d,x0=-W/2,x1=W/2,z0=-Dp/2,z1=Dp/2;
+  box(cshelfG,M.cshelf,x1-0.018,x1,0,cshelf.h,z0,z1);   // panneau de gauche
   for(let i=0;i<cshelf.n;i++){
     const y=0.10+i*(cshelf.h-0.12)/(cshelf.n-1);
-    const m=new THREE.Mesh(new THREE.CylinderGeometry(R,R,0.02,28,1,false,Math.PI,Math.PI/2),M.cshelf);
-    m.position.set(o,y,o);m.castShadow=m.receiveShadow=true;cshelfG.add(m);
+    box(cshelfG,M.cshelf,x0,x1-0.018,y-0.011,y+0.011,z0,z1);
+    box(cshelfG,M.kHandle,x0+0.03,x0+0.05,y-0.06,y-0.011,z1-0.02,z1,false);   // équerre murale discrète côté libre
   }
-  [[0,0],[-R+0.012,0],[0,-R+0.012],[-R*0.7,-R*0.7]].forEach(([x,z])=>cyl(cshelfG,M.cshelf,o+x-(x===0?0.012:0),0,cshelf.h,o+z-(z===0?0.012:0),0.011));
 }
 buildCShelf();
 const CSHELF_GAP=0.06;   // recul devant la porte coulissante
-const cshelfItem=addItem('cshelf','Étagère ouverte d\u2019angle',cshelfG,cshelf.r,cshelf.r,{x:KX0-cshelf.r/2,z:KZ1-CSHELF_GAP-cshelf.r/2,r:0},'');
+const cshelfItem=addItem('cshelf','Étagère d\u2019angle',cshelfG,cshelf.w,cshelf.d,{x:KX0-cshelf.w/2,z:KZ1-CSHELF_GAP-cshelf.d/2,r:0},'');
 cshelfItem.noRotate=true;
 cshelfItem.snapFn=it=>{
-  const p=it.obj.position,R=cshelf.r,mx=(KX0+KX1)/2,mz=(KZ0+KZ1)/2;
+  const p=it.obj.position,mx=(KX0+KX1)/2,mz=(KZ0+KZ1)/2;
   const dx=p.x<mx?1:-1,dz=p.z<mz?1:-1,cx=dx>0?KX1:KX0,cz=dz>0?KZ0:KZ1;
+  const r=dx<0&&dz<0?0:dx<0?Math.PI/2:dz>0?Math.PI:-Math.PI/2,side=Math.abs(Math.sin(r))>0.5;
+  const hx=(side?cshelf.d:cshelf.w)/2,hz=(side?cshelf.w:cshelf.d)/2;
   const gap=(cx===KX0&&cz===KZ1)?CSHELF_GAP:0;   // angle de la porte coulissante
-  p.set(cx+dx*R/2,0,cz+dz*(R/2+gap));
-  it.obj.rotation.y=dx<0&&dz<0?0:dx<0?Math.PI/2:dz>0?Math.PI:-Math.PI/2;
+  p.set(cx+dx*hx,0,cz+dz*(hz+gap));it.obj.rotation.y=r;
 };
-function cshelfInfo(){cshelfItem.info='côtés de '+Math.round(cshelf.r*100)+' cm, hauteur '+Math.round(cshelf.h*100)+' cm, '+cshelf.n+' étagères ; glisse-la vers un autre angle, touche Suppr pour l\u2019enlever';}
+function cshelfInfo(){cshelfItem.info=Math.round(cshelf.w*100)+' × '+Math.round(cshelf.d*100)+' cm, hauteur '+Math.round(cshelf.h*100)+' cm, '+cshelf.n+' étagères, sans montant côté droit ; glisse-la vers un autre angle, touche Suppr pour l\u2019enlever';}
 cshelfInfo();
 {
-  const ir=document.getElementById('cshelfR'),ih=document.getElementById('cshelfH'),inn=document.getElementById('cshelfN');
-  window.syncCShelfInputs=()=>{ir.value=Math.round(cshelf.r*100);ih.value=Math.round(cshelf.h*100);inn.value=cshelf.n;};
+  const iw=document.getElementById('cshelfW'),id_=document.getElementById('cshelfD'),ih=document.getElementById('cshelfH'),inn=document.getElementById('cshelfN');
+  window.syncCShelfInputs=()=>{iw.value=Math.round(cshelf.w*100);id_.value=Math.round(cshelf.d*100);ih.value=Math.round(cshelf.h*100);inn.value=cshelf.n;};
   const upd=()=>{
-    const r=parseFloat(ir.value),h=parseFloat(ih.value),n=parseInt(inn.value,10);
-    cshelf.r=isNaN(r)?cshelf.r:Math.min(0.6,Math.max(0.25,r/100));cshelf.h=isNaN(h)?cshelf.h:Math.min(2.2,Math.max(0.6,h/100));cshelf.n=isNaN(n)?cshelf.n:Math.min(8,Math.max(2,n));
-    cshelfItem.w=cshelfItem.d=cshelf.r;buildCShelf();cshelfInfo();clampItem(cshelfItem);syncCShelfInputs();
+    const w=parseFloat(iw.value),d=parseFloat(id_.value),h=parseFloat(ih.value),n=parseInt(inn.value,10);
+    if(!isNaN(w))cshelf.w=Math.min(1.0,Math.max(0.3,w/100));if(!isNaN(d))cshelf.d=Math.min(0.5,Math.max(0.15,d/100));
+    if(!isNaN(h))cshelf.h=Math.min(2.2,Math.max(0.6,h/100));if(!isNaN(n))cshelf.n=Math.min(8,Math.max(2,n));
+    cshelfItem.w=cshelf.w;cshelfItem.d=cshelf.d;buildCShelf();cshelfInfo();clampItem(cshelfItem);syncCShelfInputs();
     if(selected===cshelfItem){selBox.setFromObject(cshelfG);showSel(cshelfItem);}
     save();
   };
-  [ir,ih,inn].forEach(i=>i.addEventListener('change',upd));
+  [iw,id_,ih,inn].forEach(i=>i.addEventListener('change',upd));
   syncCShelfInputs();
 }
 // dimensions de la tablette
@@ -2646,7 +2651,7 @@ function loadInto(s){
   if(s&&s.sofa&&s.sofa.w){Object.assign(sofaSize,s.sofa);buildSofa();sofaInfo();}
   if(s&&s.table&&s.table.w){Object.assign(tableSize,s.table);buildTable();tableInfo();}
   if(s&&s.shelf&&s.shelf.w){shelfSize.w=Math.min(2,Math.max(0.3,+s.shelf.w));shelfSize.d=Math.min(0.8,Math.max(0.2,+s.shelf.d||0.6));shelfItem.w=shelfSize.w;shelfItem.d=shelfSize.d;buildShelf();shelfInfo();syncShelfInputs();}
-  if(s&&s.cshelf&&s.cshelf.r){cshelf.r=Math.min(0.6,Math.max(0.25,+s.cshelf.r));cshelf.h=Math.min(2.2,Math.max(0.6,+s.cshelf.h||1.8));cshelf.n=Math.min(8,Math.max(2,Math.round(+s.cshelf.n||5)));cshelfItem.w=cshelfItem.d=cshelf.r;buildCShelf();cshelfInfo();syncCShelfInputs();}
+  if(s&&s.cshelf&&s.cshelf.w){cshelf.w=Math.min(1,Math.max(0.3,+s.cshelf.w));cshelf.d=Math.min(0.5,Math.max(0.15,+s.cshelf.d||0.3));cshelf.h=Math.min(2.2,Math.max(0.6,+s.cshelf.h||1.8));cshelf.n=Math.min(8,Math.max(2,Math.round(+s.cshelf.n||5)));cshelfItem.w=cshelf.w;cshelfItem.d=cshelf.d;buildCShelf();cshelfInfo();syncCShelfInputs();}
   if(s&&s.kwin2&&s.kwin2.w){kWin2.w=Math.min(0.8,Math.max(0.2,+s.kwin2.w));kWin2.h=Math.min(0.65,Math.max(0.2,+s.kwin2.h||0.35));kWin2.y=Math.min(H-0.05-kWin2.h,Math.max(0.95,+s.kwin2.y||1.60));buildKitchenRight();syncKWin2Inputs();}
   if(s&&s.tableOpen===0){tableTarget=0;tableT=0;}
   if(s&&s.show)Object.assign(showState,s.show);
@@ -3110,7 +3115,7 @@ document.getElementById('resetBtn').addEventListener('click',()=>{
   Object.assign(showState,{bed:true,sofa:true,table:true,chairs:true,wardrobe:true,fan:true,plant:true,garden:true,mountains:true,kitchen:true,shelf:true});applyShow();
   sofaBackTarget=0;sofaBackT=0;syncSofaBackBtn();sofaBack.rotation.x=0;
   shelfSize.w=0.65;shelfSize.d=0.60;shelfItem.w=shelfSize.w;shelfItem.d=shelfSize.d;buildShelf();shelfInfo();syncShelfInputs();
-  Object.assign(cshelf,{r:0.35,h:1.80,n:5});cshelfItem.w=cshelfItem.d=cshelf.r;buildCShelf();cshelfInfo();syncCShelfInputs();
+  Object.assign(cshelf,{w:0.50,d:0.30,h:1.80,n:5});cshelfItem.w=cshelf.w;cshelfItem.d=cshelf.d;buildCShelf();cshelfInfo();syncCShelfInputs();
   kWin2.w=0.45;kWin2.h=0.35;kWin2.y=1.60;buildKitchenRight();syncKWin2Inputs();
   applyDefaults();tableTarget=1;syncTableBtn();select(null);save();
 });
