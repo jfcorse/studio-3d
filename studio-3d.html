@@ -111,6 +111,9 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 button.ghost{border-color:var(--line);color:var(--muted)}
 .sel{margin:0 0 8px;font-size:.88rem;color:var(--muted);min-height:1.2em}
 .sel strong{color:var(--ink);font-weight:600}
+.wroom[hidden]{display:none}
+.swlabel.wall-all{font-weight:600;color:var(--ink);margin-top:4px}
+.wroom .wall-all+.swatches{padding-bottom:10px;border-bottom:1px solid var(--line);margin-bottom:12px}
 .seldist{color:var(--accent);font-weight:500}
 .sizes{display:none;gap:8px;margin:0 0 10px}
 .sizes.on{display:flex}
@@ -374,21 +377,33 @@ button.ghost{border-color:var(--line);color:var(--muted)}
 
   <details class="acc" data-acc="walls">
     <summary>Couleur des murs</summary>
-    <p class="swlabel">Mur du fond</p><div class="swatches" id="wallBackSw"></div>
-    <p class="swlabel">Mur de gauche (portes-fenêtres)</p><div class="swatches" id="wallLeftSw"></div>
-    <p class="swlabel">Mur de droite</p><div class="swatches" id="wallRightSw"></div>
-    <p class="swlabel">Mur d'entrée</p><div class="swatches" id="wallFrontSw"></div>
-    <p class="swlabel" style="font-weight:600;color:var(--ink);margin-top:12px">Cuisine</p>
-    <p class="swlabel">Mur de la fenêtre et du lave-linge</p><div class="swatches" id="wallKFarSw"></div>
-    <p class="swlabel">Mur des meubles hauts (petite fenêtre)</p><div class="swatches" id="wallKRightSw"></div>
-    <p class="swlabel">Mur de la porte de la salle de bain</p><div class="swatches" id="wallKDoorSw"></div>
-    <p class="swlabel">Mur de la porte-fenêtre (côté studio)</p><div class="swatches" id="wallKStudioSw"></div>
-    <p class="swlabel" style="font-weight:600;color:var(--ink);margin-top:12px">Salle de bain</p>
-    <p class="swlabel">Mur de la douche (côté studio)</p><div class="swatches" id="wallBShowerSw"></div>
-    <p class="swlabel">Mur du fond (WC)</p><div class="swatches" id="wallBBackSw"></div>
-    <p class="swlabel">Mur du lave-main</p><div class="swatches" id="wallBBasinSw"></div>
-    <p class="swlabel">Mur de la porte</p><div class="swatches" id="wallBDoorSw"></div>
-    <p class="swlabel">Ébrasements des portes-fenêtres</p><div class="swatches" id="revealSw"></div>
+    <div class="seg" id="wallRoomSeg">
+      <button data-wroom="studio" aria-pressed="true">Studio</button>
+      <button data-wroom="kitchen" aria-pressed="false">Cuisine</button>
+      <button data-wroom="bath" aria-pressed="false">Salle de bain</button>
+    </div>
+    <div class="wroom" data-wroom="studio">
+      <p class="swlabel wall-all">Tous les murs du studio</p><div class="swatches" id="wallAllStudioSw"></div>
+      <p class="swlabel">Mur du fond</p><div class="swatches" id="wallBackSw"></div>
+      <p class="swlabel">Mur de gauche (portes-fenêtres)</p><div class="swatches" id="wallLeftSw"></div>
+      <p class="swlabel">Mur de droite</p><div class="swatches" id="wallRightSw"></div>
+      <p class="swlabel">Mur d'entrée</p><div class="swatches" id="wallFrontSw"></div>
+      <p class="swlabel">Ébrasements des portes-fenêtres</p><div class="swatches" id="revealSw"></div>
+    </div>
+    <div class="wroom" data-wroom="kitchen" hidden>
+      <p class="swlabel wall-all">Tous les murs de la cuisine</p><div class="swatches" id="wallAllKitchenSw"></div>
+      <p class="swlabel">Mur de la fenêtre et du lave-linge</p><div class="swatches" id="wallKFarSw"></div>
+      <p class="swlabel">Mur des meubles hauts (petite fenêtre)</p><div class="swatches" id="wallKRightSw"></div>
+      <p class="swlabel">Mur de la porte de la salle de bain</p><div class="swatches" id="wallKDoorSw"></div>
+      <p class="swlabel">Mur de la porte-fenêtre (côté studio)</p><div class="swatches" id="wallKStudioSw"></div>
+    </div>
+    <div class="wroom" data-wroom="bath" hidden>
+      <p class="swlabel wall-all">Tous les murs de la salle de bain</p><div class="swatches" id="wallAllBathSw"></div>
+      <p class="swlabel">Mur de la douche (côté studio)</p><div class="swatches" id="wallBShowerSw"></div>
+      <p class="swlabel">Mur du fond (WC)</p><div class="swatches" id="wallBBackSw"></div>
+      <p class="swlabel">Mur du lave-main</p><div class="swatches" id="wallBBasinSw"></div>
+      <p class="swlabel">Mur de la porte</p><div class="swatches" id="wallBDoorSw"></div>
+    </div>
   </details>
 
   <details class="acc" data-acc="show">
@@ -928,17 +943,28 @@ frenchWindow(2.64);
 const KD=1.65,KZ1=D,KZ0=KZ1-2.00,KX0=-TL,KX1=-TL-KD,KT=0.20;
 const kitchenG=new THREE.Group();scene.add(kitchenG);
 const kitchenWalls=[];
-function tomette(base){
-  const S=256,c=document.createElement('canvas');c.width=c.height=S;
-  const g=c.getContext('2d'),r=rng(19);
-  g.fillStyle=base;g.fillRect(0,0,S,S);
-  for(let i=0;i<8;i++)for(let j=0;j<8;j++){
-    g.fillStyle=shade(base,(r()-0.5)*0.28);g.fillRect(i*32+1.5,j*32+1.5,29,29);
+/* Carrelage de 120 × 120 cm (cuisine et salle de bain) : la texture contient 2 × 2 carreaux et joints fins.
+   Calepinage centré sur la pièce : on centre un joint ou un carreau, selon ce qui laisse les coupes les plus larges. */
+function tileLayout(L){   // renvoie [repeat, offset] pour une longueur de pièce L (m)
+  const T=1.2,cutJ=(L/2)%T||T,cutT=(L/2+T/2)%T||T,rep=L/(2*T);
+  return[rep,cutJ>=cutT?0.5-rep/2:0.25-rep/2];   // joint au centre (u ≡ 0 mod ½) ou carreau au centre (u ≡ ¼ mod ½)
+}
+function floorTiles(base,Lx,Lz,seed){
+  const S=512,c=document.createElement('canvas');c.width=c.height=S;
+  const g=c.getContext('2d'),r=rng(seed||19);
+  g.fillStyle=shade(base,-0.25);g.fillRect(0,0,S,S);   // joints
+  for(let i=0;i<2;i++)for(let j=0;j<2;j++){
+    const x=i*256,y=j*256;
+    g.fillStyle=shade(base,(r()-0.5)*0.10);g.fillRect(x+1,y+1,254,254);
+    for(let k=0;k<260;k++){g.fillStyle=shade(base,(r()-0.5)*0.16);g.globalAlpha=0.35;g.fillRect(x+1+r()*252,y+1+r()*252,1+r()*2,1+r()*2);}
+    g.globalAlpha=1;
   }
   const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;
-  t.repeat.set(KD/1.6,(KZ1-KZ0)/1.6);t.anisotropy=renderer.capabilities.getMaxAnisotropy();t.encoding=THREE.sRGBEncoding;
+  const[rx,ox]=tileLayout(Lx),[rz,oz]=tileLayout(Lz);
+  t.repeat.set(rx,rz);t.offset.set(ox,oz);t.anisotropy=renderer.capabilities.getMaxAnisotropy();t.encoding=THREE.sRGBEncoding;
   return t;
 }
+const tomette=base=>floorTiles(base,KD,KZ1-KZ0,19);   // sol de la cuisine (couleur réglable)
 M.kitchenFloor=new THREE.MeshStandardMaterial({map:tomette('#8a4a33'),roughness:0.55});
 const kf=new THREE.Mesh(new THREE.PlaneGeometry(KD,KZ1-KZ0),M.kitchenFloor);
 kf.rotation.x=-Math.PI/2;kf.position.set((KX0+KX1)/2,0.001,(KZ0+KZ1)/2);kf.receiveShadow=true;kitchenG.add(kf);
@@ -1106,10 +1132,7 @@ let showerType='two';   // porte de douche : 'two' (2 vantaux, passage 60 cm), '
 const wcG=new THREE.Group(),basinG=new THREE.Group(),showerColG=new THREE.Group();   // WC et lave-main, déplaçables dans la salle de bain
 {
   // sol carrelé
-  const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d');
-  g.fillStyle='#b9b9b5';g.fillRect(0,0,256,256);
-  for(let i=0;i<4;i++)for(let j=0;j<4;j++){g.fillStyle=(i+j)%2?'#e9e8e4':'#e2e1dc';g.fillRect(i*64+1.5,j*64+1.5,61,61);}
-  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set((SBX1-SBX0)/1.2,(SBZ1-SBZ0)/1.2);t.encoding=THREE.sRGBEncoding;
+  const t=floorTiles('#e6e5e0',SBX1-SBX0,SBZ1-SBZ0,23);   // carrelage 120 × 120 cm
   const fl=new THREE.Mesh(new THREE.PlaneGeometry(SBX1-SBX0,SBZ1-SBZ0),new THREE.MeshStandardMaterial({map:t,roughness:0.35}));
   fl.rotation.x=-Math.PI/2;fl.position.set((SBX0+SBX1)/2,0.001,(SBZ0+SBZ1)/2);fl.receiveShadow=true;kitchenG.add(fl);
   box(kitchenG,M.slab,SBX0-KT,SBX1+KT,-0.08,0,KZ1+KT,SBZ1+KT,false);
@@ -2044,10 +2067,10 @@ showerColItem.snapFn=it=>{
 };
 const wcItem=addItem('wc','WC suspendu',wcG,0.36,0.49,{x:(SBX0+SBX1-SHW)/2-0.02,z:SBZ1-0.245,r:0},'36 × 49 cm depuis le mur, blanc, avec plaque de commande');
 wcItem.bounds=BATH_FREE;
-/* WC en angle : bâti d'angle triangulaire (côtés de 55 cm le long des murs), WC à 45°, dos contre le bâti.
+/* WC en angle : bâti d'angle triangulaire (côtés de 45 cm le long des murs), WC à 45°, dos contre le bâti.
    Il se cale dans l'angle le plus proche parmi les deux vrais angles de la salle de bain (mur du lave-main avec
    le mur de la porte ou avec le mur du fond) ; de l'autre côté, ce sont la porte et la paroi de la douche. */
-const WC_LEG=0.55,WC_TRI=WC_LEG/Math.SQRT2;   // distance de l'angle à la face avant du bâti ≈ 39 cm
+const WC_LEG=0.45,WC_TRI=WC_LEG/Math.SQRT2;   // distance de l'angle à la face avant du bâti ≈ 39 cm
 let wcCorner=false;
 const wcFrameG=new THREE.Group();wcFrameG.visible=false;wcG.add(wcFrameG);
 {
@@ -2067,7 +2090,7 @@ function setWcCorner(on){
   wcCorner=on;wcFrameG.visible=on;wcItem.snapFn=on?snapWcCorner:null;wcItem.noRotate=on;
   if(!on&&Math.abs(Math.round(wcItem.obj.rotation.y/(Math.PI/2))*(Math.PI/2)-wcItem.obj.rotation.y)>0.01)
     wcItem.obj.rotation.y=Math.round(wcItem.obj.rotation.y/(Math.PI/2))*(Math.PI/2);   // retour contre un mur : angle droit le plus proche
-  wcItem.info=on?'36 × 49 cm, posé en angle à 45° sur un bâti d\u2019angle (côtés de 55 cm), blanc':'36 × 49 cm depuis le mur, blanc, avec plaque de commande';
+  wcItem.info=on?'36 × 49 cm, posé en angle à 45° sur un bâti d\u2019angle (côtés de 45 cm), blanc':'36 × 49 cm depuis le mur, blanc, avec plaque de commande';
   clampItem(wcItem);
   document.querySelectorAll('[data-wcmode]').forEach(b=>b.setAttribute('aria-pressed',String((b.dataset.wcmode==='corner')===on)));
   if(selected===wcItem){selBox.setFromObject(wcG);showSel(wcItem);}
@@ -2151,20 +2174,36 @@ function applyColor(k){
     if(k==='sofaFabric')M.sofaDark.color.set(shade(colors[k],-0.15));
   }
   renderSwatches(sw,COLOR_PRESETS[k]||COLOR_PRESETS[k.startsWith('wall')?'wall':k],colors[k],c=>{colors[k]=c;applyColor(k);save();});
+  const room=Object.keys(WALL_ROOMS).find(r=>WALL_ROOMS[r].keys.includes(k));
+  if(room)renderWallAll(room);
 }
+// couleurs des murs : une pièce à la fois (onglets), avec une ligne « tous les murs de la pièce »
+const WALL_ROOMS={
+  studio:{sw:'wallAllStudioSw',keys:['wallBack','wallLeft','wallRight','wallFront']},
+  kitchen:{sw:'wallAllKitchenSw',keys:['wallKFar','wallKRight','wallKDoor','wallKStudio']},
+  bath:{sw:'wallAllBathSw',keys:['wallBShower','wallBBack','wallBBasin','wallBDoor']},
+};
+function renderWallAll(room){
+  const R=WALL_ROOMS[room],c0=colors[R.keys[0]],same=R.keys.every(k=>colors[k].toLowerCase()===c0.toLowerCase());
+  renderSwatches(R.sw,COLOR_PRESETS.wall,same?c0:null,c=>{R.keys.forEach(k=>{colors[k]=c;applyColor(k);});save();});
+}
+document.querySelectorAll('[data-wroom]').forEach(b=>{if(b.tagName!=='BUTTON')return;b.addEventListener('click',()=>{
+  document.querySelectorAll('#wallRoomSeg [data-wroom]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+  document.querySelectorAll('.wroom').forEach(d=>d.hidden=d.dataset.wroom!==b.dataset.wroom);
+});});
 function renderSwatches(id,presets,current,onPick){
   const el=document.getElementById(id);el.innerHTML='';
   let matched=false;
   presets.forEach(([name,hex])=>{
     const b=document.createElement('button');b.className='sw';b.style.setProperty('--c',hex);
     b.title=name;b.setAttribute('aria-label',name);
-    const on=hex.toLowerCase()===current.toLowerCase();matched=matched||on;
+    const on=!!current&&hex.toLowerCase()===current.toLowerCase();matched=matched||on;
     b.setAttribute('aria-pressed',String(on));
     b.addEventListener('click',()=>onPick(hex));el.appendChild(b);
   });
-  const inp=document.createElement('input');inp.type='color';inp.value=current;
+  const inp=document.createElement('input');inp.type='color';inp.value=current||'#f6f5f1';   // current null : couleurs différentes (ligne « tous les murs »)
   inp.title='Autre couleur';inp.setAttribute('aria-label','Autre couleur');
-  if(!matched)inp.style.outline='2px solid var(--accent)';
+  if(!matched&&current)inp.style.outline='2px solid var(--accent)';
   inp.addEventListener('change',()=>onPick(inp.value));el.appendChild(inp);
 }
 document.getElementById('floorGranito').addEventListener('click',()=>{if(floorState.type!=='granito'){floorState.type='granito';floorState.color=FLOOR_PRESETS.granito[0][1];applyFloor();save();}});
