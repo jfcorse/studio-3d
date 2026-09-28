@@ -249,6 +249,15 @@ button.ghost{border-color:var(--line);color:var(--muted)}
       <label>Profondeur (cm)<input id="shelfD" type="number" min="20" max="80" step="5" inputmode="numeric"></label>
       <label>Hauteur du dessus (cm)<input id="shelfY" type="number" min="40" max="220" step="1" inputmode="numeric"></label>
     </div>
+    <div class="sizes" id="mirrorSizes">
+      <label>Largeur (cm)<input id="mirrorW" type="number" min="20" max="150" step="5" inputmode="numeric"></label>
+      <label>Hauteur (cm)<input id="mirrorH" type="number" min="20" max="150" step="5" inputmode="numeric"></label>
+      <label>Bas à (cm du sol)<input id="mirrorY" type="number" min="40" max="220" step="5" inputmode="numeric"></label>
+    </div>
+    <div id="mirrorColors" class="colorset">
+      <p class="note" style="margin:0 0 8px">Glisse le miroir pour le déplacer le long des murs de la salle de bain.</p>
+      <p class="swlabel">Cadre du miroir</p><div class="swatches" id="mirrorFrameSw"></div>
+    </div>
     <div class="sizes" id="cshelfSizes">
       <label>Longueur (cm)<input id="cshelfW" type="number" min="30" max="100" step="5" inputmode="numeric"></label>
       <label>Profondeur (cm)<input id="cshelfD" type="number" min="15" max="50" step="5" inputmode="numeric"></label>
@@ -2259,6 +2268,60 @@ showerColItem.snapFn=it=>{
   if(k==='x1'){p.set(SBX1,0,Math.min(SBZ1-COLM,Math.max(SHZ0+COLM,z)));it.obj.rotation.y=0;}
   else{p.set(Math.min(SBX1-COLM,Math.max(SHX0+COLM,x)),0,k==='z1'?SBZ1:SBZ0);it.obj.rotation.y=k==='z1'?-Math.PI/2:Math.PI/2;}
 };
+/* Miroir de la salle de bain : largeur, hauteur et hauteur du bas réglables ; il glisse le long des murs de la
+   partie libre (mur du lave-main, mur du fond, mur de la porte à côté de la porte) et se colle au mur le plus proche. */
+M.mirrorFrame=new THREE.MeshStandardMaterial({color:0x2b2b2b,roughness:0.4,metalness:0.3});
+M.mirrorGlass=(()=>{   // reflet suggéré : dégradé clair-foncé, légèrement métallique
+  const c=document.createElement('canvas');c.width=64;c.height=256;const g=c.getContext('2d');
+  const gr=g.createLinearGradient(0,0,64,256);gr.addColorStop(0,'#e9eef0');gr.addColorStop(0.45,'#b9c4c9');gr.addColorStop(0.55,'#cfd8dc');gr.addColorStop(1,'#8e9aa0');
+  g.fillStyle=gr;g.fillRect(0,0,64,256);const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;
+  return new THREE.MeshStandardMaterial({map:t,roughness:0.08,metalness:0.6});
+})();
+const mirror={w:0.45,h:0.60,y:1.10};
+const mirrorG=new THREE.Group();
+function buildMirror(){
+  while(mirrorG.children.length){const c=mirrorG.children.pop();c.geometry&&c.geometry.dispose();}
+  // repère local : mur en x=0, le miroir avance vers −x ; largeur le long de z
+  const w=mirror.w/2,y0=mirror.y,y1=mirror.y+mirror.h,f=0.02;
+  box(mirrorG,M.mirrorFrame,-0.02,0,y0,y1,-w,w,false);
+  box(mirrorG,M.mirrorGlass,-0.021,-0.02,y0+f,y1-f,-w+f,w-f,false);
+}
+buildMirror();
+const MIR_WALLS=[   // [axe, position du mur, début, fin, rotation]
+  ['x',SBX0,SBZ0,SBZ1,Math.PI],             // mur du lave-main (miroir tourné vers +x)
+  ['z',SBZ1,SBX0,SBX1-SHW,-Math.PI/2],      // mur du fond
+  ['z',SBZ0,SBX0,BDX0,Math.PI/2],           // mur de la porte, à gauche de la porte
+];
+const mirrorItem=addItem('mirror','Miroir',mirrorG,0.03,mirror.w,{x:SBX0,z:SBZ0+0.27,r:Math.PI},'');
+mirrorItem.noRotate=true;
+mirrorItem.snapFn=it=>{
+  const p=it.obj.position,hw=mirror.w/2;let best=null;
+  MIR_WALLS.forEach(([ax,pos,a0,a1,r])=>{
+    const along=ax==='x'?p.z:p.x,dist=Math.abs((ax==='x'?p.x:p.z)-pos);
+    if(a1-a0<mirror.w)return;
+    const a=Math.min(a1-hw,Math.max(a0+hw,along)),d=dist+Math.abs(a-along);
+    if(!best||d<best.d)best={d,ax,pos,a,r};
+  });
+  if(!best)return;
+  if(best.ax==='x')p.set(best.pos,0,best.a);else p.set(best.a,0,best.pos);
+  it.obj.rotation.y=best.r;
+};
+function mirrorInfo(){mirrorItem.info=Math.round(mirror.w*100)+' × '+Math.round(mirror.h*100)+' cm, bas à '+Math.round(mirror.y*100)+' cm du sol ; glisse-le le long des murs';}
+mirrorInfo();
+{
+  const iw=document.getElementById('mirrorW'),ih=document.getElementById('mirrorH'),iy=document.getElementById('mirrorY');
+  window.syncMirrorInputs=()=>{iw.value=Math.round(mirror.w*100);ih.value=Math.round(mirror.h*100);iy.value=Math.round(mirror.y*100);};
+  const upd=()=>{
+    const w=parseFloat(iw.value),h=parseFloat(ih.value),y=parseFloat(iy.value);
+    if(!isNaN(w))mirror.w=Math.min(1.5,Math.max(0.2,w/100));if(!isNaN(h))mirror.h=Math.min(1.5,Math.max(0.2,h/100));
+    if(!isNaN(y))mirror.y=Math.min(H-0.05-mirror.h,Math.max(0.4,y/100));
+    mirrorItem.d=mirror.w;buildMirror();mirrorInfo();clampItem(mirrorItem);syncMirrorInputs();
+    if(selected===mirrorItem){selBox.setFromObject(mirrorG);showSel(mirrorItem);}
+    save();
+  };
+  [iw,ih,iy].forEach(i=>i.addEventListener('change',upd));
+  syncMirrorInputs();
+}
 const wcItem=addItem('wc','WC suspendu',wcG,0.36,0.49,{x:(SBX0+SBX1-SHW)/2-0.02,z:SBZ1-0.245,r:0},'36 × 49 cm depuis le mur, blanc, avec plaque de commande');
 wcItem.bounds=BATH_FREE;
 /* WC en angle : bâti d'angle triangulaire (côtés de 45 cm le long des murs), WC à 45°, dos contre le bâti.
@@ -2331,6 +2394,7 @@ const COLOR_PRESETS={
   bathDoor:[['Blanc','#f1f0ec'],['Gris clair','#c9ccd0'],['Anthracite','#4a4f55'],['Noir','#26282b'],['Chêne clair','#cfae80'],['Noyer','#6f4a30'],['Vert sauge','#a7b39a'],['Bleu','#7fa3bf'],['Terracotta','#c27a55']],
   showerFrame:[['Chromé','#c8ccd0'],['Noir mat','#1f1f1f'],['Blanc','#f1f0ec'],['Laiton','#b89455'],['Doré','#d4af37'],['Anthracite','#4a4f55']],
   bathTaps:[['Chromé','#dfe2e5'],['Noir mat','#1f1f1f'],['Laiton brossé','#b89455'],['Doré','#d4af37'],['Cuivre','#b87333'],['Inox brossé','#a9adb1'],['Blanc','#f1f0ec'],['Gris canon de fusil','#55585c']],
+  mirrorFrame:[['Noir','#2b2b2b'],['Blanc','#f1efe9'],['Chromé','#dfe2e5'],['Doré','#c9a44c'],['Chêne clair','#cfae80'],['Noyer','#6f4a30']],
   cshelfBoard:[['Noyer','#6f4a30'],['Chêne clair','#cfae80'],['Chêne naturel','#b8894f'],['Blanc','#f1efe9'],['Gris béton','#9a9a95'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Vert sauge','#a7b39a']],
   cshelf:[['Blanc','#f1efe9'],['Chêne clair','#cfae80'],['Chêne naturel','#b8894f'],['Noyer','#6f4a30'],['Gris béton','#9a9a95'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Vert sauge','#a7b39a']],
   shelf:[['Chêne clair','#cfae80'],['Chêne naturel','#b8894f'],['Noyer','#6f4a30'],['Blanc','#f1efe9'],['Gris béton','#9a9a95'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Vert sauge','#a7b39a']],
@@ -2341,7 +2405,7 @@ const COLOR_PRESETS={
   washer:[['Blanc','#f2f2f0'],['Gris clair','#c9ccd0'],['Inox','#b5b9bc'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Rouge','#b3262e'],['Bleu','#5d7fa3'],['Vert sauge','#a7b39a']],
   armWood:[['Chêne','#cfae80'],['Châtaignier','#9a6a40'],['Noyer','#6f4a30'],['Merisier','#98492b'],['Blanc','#f1efe9'],['Vert d\'eau','#b9cbbf'],['Bleu gris','#8d9ea8']]
 };
-const colors={bedFrame:'#c9ccd0',bedPanel:'#e6c65a',bedLinen:'#d9dde3',armWood:'#cfae80',sofaFabric:'#8f9c98',tableWood:'#cfae80',chairWood:'#cfae80',chairFrame:'#3a3f43',reveal:'#f6f5f1',wallBack:'#f6f5f1',wallLeft:'#f6f5f1',wallRight:'#f6f5f1',wallFront:'#f6f5f1',kitchenFloor:'#8a4a33',bathDoor:'#f1f0ec',showerFrame:'#c8ccd0',washer:'#f2f2f0',washerRing:'#dfe2e5',washerPort:'#1d2327',shelf:'#cfae80',cshelf:'#f1efe9',cshelfBoard:'#6f4a30',basin:'#b3262e',kwin2:'#f4f3ef',wallKFar:'#f6f5f1',wallKRight:'#f6f5f1',wallKDoor:'#f6f5f1',wallKStudio:'#f6f5f1',wallBShower:'#f6f5f1',wallBBack:'#f6f5f1',wallBBasin:'#f6f5f1',wallBDoor:'#f6f5f1',bathTaps:'#dfe2e5'};
+const colors={bedFrame:'#c9ccd0',bedPanel:'#e6c65a',bedLinen:'#d9dde3',armWood:'#cfae80',sofaFabric:'#8f9c98',tableWood:'#cfae80',chairWood:'#cfae80',chairFrame:'#3a3f43',reveal:'#f6f5f1',wallBack:'#f6f5f1',wallLeft:'#f6f5f1',wallRight:'#f6f5f1',wallFront:'#f6f5f1',kitchenFloor:'#8a4a33',bathDoor:'#f1f0ec',showerFrame:'#c8ccd0',washer:'#f2f2f0',washerRing:'#dfe2e5',washerPort:'#1d2327',shelf:'#cfae80',cshelf:'#f1efe9',cshelfBoard:'#6f4a30',mirrorFrame:'#2b2b2b',basin:'#b3262e',kwin2:'#f4f3ef',wallKFar:'#f6f5f1',wallKRight:'#f6f5f1',wallKDoor:'#f6f5f1',wallKStudio:'#f6f5f1',wallBShower:'#f6f5f1',wallBBack:'#f6f5f1',wallBBasin:'#f6f5f1',wallBDoor:'#f6f5f1',bathTaps:'#dfe2e5'};
 const COLOR_TARGETS={
   bedFrame:[()=>M.bedGrey,'bedFrameSw'],bedPanel:[()=>M.yellow,'bedPanelSw'],
   bedLinen:[()=>M.duvet,'bedLinenSw'],armWood:[()=>M.armWood,'armWoodSw'],
@@ -2351,7 +2415,7 @@ const COLOR_TARGETS={
   wallLeft:[()=>walls[0].mat,'wallLeftSw'],wallBack:[()=>walls[1].mat,'wallBackSw'],
   wallRight:[()=>walls[2].mat,'wallRightSw'],wallFront:[()=>walls[3].mat,'wallFrontSw'],
   kitchenFloor:[()=>M.kitchenFloor,'kitchenFloorSw'],
-  bathDoor:[()=>M.bathDoor,'bathDoorSw'],showerFrame:[()=>M.showerFrame,'showerFrameSw'],washer:[()=>M.washer,'washerSw'],washerRing:[()=>M.washerRing,'washerRingSw'],washerPort:[()=>M.washerPort,'washerPortSw'],shelf:[()=>M.shelf,'shelfSw'],cshelf:[()=>M.cshelf,'cshelfSw'],cshelfBoard:[()=>M.cshelfBoard,'cshelfBoardSw'],basin:[()=>M.basinRed,'basinSw'],kwin2:[()=>M.kWin2,'kwin2Sw'],bathTaps:[()=>M.chrome,'bathTapsSw'],
+  bathDoor:[()=>M.bathDoor,'bathDoorSw'],showerFrame:[()=>M.showerFrame,'showerFrameSw'],washer:[()=>M.washer,'washerSw'],washerRing:[()=>M.washerRing,'washerRingSw'],washerPort:[()=>M.washerPort,'washerPortSw'],shelf:[()=>M.shelf,'shelfSw'],cshelf:[()=>M.cshelf,'cshelfSw'],cshelfBoard:[()=>M.cshelfBoard,'cshelfBoardSw'],mirrorFrame:[()=>M.mirrorFrame,'mirrorFrameSw'],basin:[()=>M.basinRed,'basinSw'],kwin2:[()=>M.kWin2,'kwin2Sw'],bathTaps:[()=>M.chrome,'bathTapsSw'],
   wallKFar:[()=>wallMat(kitchenFarG),'wallKFarSw'],wallKRight:[()=>wallMat(kitchenRightG),'wallKRightSw'],
   wallKDoor:[()=>wallMat(bathWallG.z0),'wallKDoorSw'],wallKStudio:[()=>kitchenStudioPaint,'wallKStudioSw'],
   wallBShower:[()=>wallMat(bathWallG.x1),'wallBShowerSw'],wallBBack:[()=>wallMat(bathWallG.z1),'wallBBackSw'],
@@ -2486,7 +2550,7 @@ const selBox=new THREE.BoxHelper(undefined,0x2f8f93);selBox.visible=false;scene.
 const selEl=document.getElementById('sel'),rotBtn=document.getElementById('rotBtn'),rot15Btn=document.getElementById('rot15Btn');
 const delBtn=document.getElementById('delBtn'),restoreBtn=document.getElementById('restoreBtn'),freezeBtn=document.getElementById('freezeBtn');
 // Supprimables : le décor du jardin, la grande plante et les chaises (les meubles se masquent avec « Afficher »).
-const isRemovable=it=>!!it.deco||it.id==='plant'||it.id==='cshelf'||it.id.startsWith('chair');
+const isRemovable=it=>!!it.deco||it.id==='plant'||it.id==='cshelf'||it.id==='mirror'||it.id.startsWith('chair');
 function removeSelected(){
   if(!selected||!isRemovable(selected))return;
   const name=selected.name;removed.add(selected.id);select(null);applyShow();save();
@@ -2527,7 +2591,7 @@ function select(it){
   if(it&&it!==was)panelEl.scrollTo({top:0,behavior:reduceMotion?'auto':'smooth'});
   selBox.visible=!!it;
   if(it){selBox.setFromObject(it.obj);showSel(it);}
-  else{selEl.textContent=frozen?'Éléments figés : plus rien n\u2019est sélectionnable. Clique sur « Défiger les éléments » pour les modifier.':'Clique sur un meuble pour le sélectionner.';document.getElementById('sofaSizes').classList.remove('on');document.getElementById('wardSizes').classList.remove('on');document.getElementById('wardColors').classList.remove('on');document.getElementById('bedColors').classList.remove('on');document.getElementById('armColors').classList.remove('on');['tableColors','chairColors','fanSizes','sofaColors','bathDoorColors','showerColors','washerColors','tapColors','shelfSizes','shelfColors','basinColors','wcSet','cshelfSizes','cshelfColors','kwin2Sizes','kwin2Colors'].forEach(i=>document.getElementById(i).classList.remove('on'));document.getElementById('tableSizes').classList.remove('on');document.getElementById('tableNote').hidden=true;}
+  else{selEl.textContent=frozen?'Éléments figés : plus rien n\u2019est sélectionnable. Clique sur « Défiger les éléments » pour les modifier.':'Clique sur un meuble pour le sélectionner.';document.getElementById('sofaSizes').classList.remove('on');document.getElementById('wardSizes').classList.remove('on');document.getElementById('wardColors').classList.remove('on');document.getElementById('bedColors').classList.remove('on');document.getElementById('armColors').classList.remove('on');['tableColors','chairColors','fanSizes','sofaColors','bathDoorColors','showerColors','washerColors','tapColors','shelfSizes','shelfColors','basinColors','wcSet','cshelfSizes','cshelfColors','mirrorSizes','mirrorColors','kwin2Sizes','kwin2Colors'].forEach(i=>document.getElementById(i).classList.remove('on'));document.getElementById('tableSizes').classList.remove('on');document.getElementById('tableNote').hidden=true;}
   rotBtn.disabled=rot15Btn.disabled=!it||!!it.wallSnap||!!it.fixed||!!it.noRotate;
   delBtn.disabled=!it||!isRemovable(it);
 }
@@ -2552,6 +2616,8 @@ function showSel(it){
   document.getElementById('shelfSizes').classList.toggle('on',it.id==='shelf');
   document.getElementById('shelfColors').classList.toggle('on',it.id==='shelf');
   document.getElementById('cshelfSizes').classList.toggle('on',it.id==='cshelf');
+  document.getElementById('mirrorSizes').classList.toggle('on',it.id==='mirror');
+  document.getElementById('mirrorColors').classList.toggle('on',it.id==='mirror');
   document.getElementById('cshelfColors').classList.toggle('on',it.id==='cshelf');
   document.getElementById('tapColors').classList.toggle('on',it.id==='shower'||it.id==='basin'||it.id==='showercol');
   if(it!==tableItem)document.getElementById('tableNote').hidden=true;
@@ -2628,7 +2694,7 @@ function groupItems(k){
   if(k==='fan')return[fanItem];
   if(k==='garden'||k==='mountains')return[];
   if(k==='shelf')return[shelfItem];
-  if(k==='kitchen')return[kitchenItem,wcItem,basinItem,washerItem,showerColItem,cshelfItem];
+  if(k==='kitchen')return[kitchenItem,wcItem,basinItem,washerItem,showerColItem,cshelfItem,mirrorItem];
   if(k==='plant')return[plantItem];
   return items.filter(i=>i.id.startsWith('chair'));
 }
@@ -2660,7 +2726,7 @@ document.querySelectorAll('[data-show]').forEach(b=>b.addEventListener('click',(
   const k=b.dataset.show;showState[k]=!showState[k];applyShow();save();
 }));
 function getState(){
-  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),cshelf:Object.assign({},cshelf),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),bathFloorTiles:Object.assign({},bathFloorTiles),tileTone,dayLevel,sitter:sitterOn,dimsOn,wcCorner,walkRecul:walk.recul,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
+  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),cshelf:Object.assign({},cshelf),mirror:Object.assign({},mirror),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),bathFloorTiles:Object.assign({},bathFloorTiles),tileTone,dayLevel,sitter:sitterOn,dimsOn,wcCorner,walkRecul:walk.recul,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
   items.forEach(it=>o.items[it.id]={x:it.obj.position.x,z:it.obj.position.z,r:it.obj.rotation.y});
   return JSON.parse(JSON.stringify(o));
 }
@@ -2701,6 +2767,7 @@ function loadInto(s){
   if(s&&s.table&&s.table.w){Object.assign(tableSize,s.table);buildTable();tableInfo();}
   if(s&&s.shelf&&s.shelf.w){shelfSize.w=Math.min(2,Math.max(0.3,+s.shelf.w));shelfSize.d=Math.min(0.8,Math.max(0.2,+s.shelf.d||0.6));shelfSize.y=typeof s.shelf.y==='number'?Math.min(2.2,Math.max(0.4,s.shelf.y)):0.86;shelfItem.w=shelfSize.w;shelfItem.d=shelfSize.d;buildShelf();shelfInfo();syncShelfInputs();}
   if(s&&s.cshelf&&s.cshelf.w){cshelf.w=Math.min(1,Math.max(0.3,+s.cshelf.w));cshelf.d=Math.min(0.5,Math.max(0.15,+s.cshelf.d||0.3));cshelf.h=Math.min(2.2,Math.max(0.6,+s.cshelf.h||1.8));cshelf.n=Math.min(8,Math.max(2,Math.round(+s.cshelf.n||5)));cshelf.back=s.cshelf.back!==false;cshelf.side=!!s.cshelf.side;cshelfItem.w=cshelf.w;cshelfItem.d=cshelf.d;buildCShelf();cshelfInfo();syncCShelfInputs();}
+  if(s&&s.mirror&&s.mirror.w){mirror.w=Math.min(1.5,Math.max(0.2,+s.mirror.w));mirror.h=Math.min(1.5,Math.max(0.2,+s.mirror.h||0.6));mirror.y=Math.min(H-0.05-mirror.h,Math.max(0.4,+s.mirror.y||1.1));mirrorItem.d=mirror.w;buildMirror();mirrorInfo();syncMirrorInputs();}
   if(s&&s.kwin2&&s.kwin2.w){kWin2.w=Math.min(0.8,Math.max(0.2,+s.kwin2.w));kWin2.h=Math.min(0.65,Math.max(0.2,+s.kwin2.h||0.35));kWin2.y=Math.min(H-0.05-kWin2.h,Math.max(0.95,+s.kwin2.y||1.60));buildKitchenRight();syncKWin2Inputs();}
   if(s&&s.tableOpen===0){tableTarget=0;tableT=0;}
   if(s&&s.show)Object.assign(showState,s.show);
@@ -2734,7 +2801,7 @@ function loadInto(s){
   if(s&&s.items){
     items.forEach(it=>{const p=s.items[it.id];if(p){it.obj.position.set(p.x,0,p.z);it.obj.rotation.y=p.r;}});
     items.forEach(it=>{if(it.wallSnap)snapWall(it);});
-    [kitchenItem,wcItem,basinItem,washerItem,shelfItem,showerColItem,cshelfItem].forEach(clampItem);   // la cuisine et la salle de bain ont pu changer depuis l'enregistrement
+    [kitchenItem,wcItem,basinItem,washerItem,shelfItem,showerColItem,cshelfItem,mirrorItem].forEach(clampItem);   // la cuisine et la salle de bain ont pu changer depuis l'enregistrement
     if(s.tableOpen===0){tableTarget=0;tableT=0;}
     if(s.sofaBack===1){sofaBackTarget=1;sofaBackT=1;sofaBack.rotation.x=-Math.PI/2;clampItem(sofaItem);}
   }
@@ -2810,7 +2877,7 @@ function applyPlan(state){
   buildWardrobe();wardInfo();buildSofa();sofaInfo();buildTable();poseTable(tableT);tableInfo();buildFan();fanItem.w=fanItem.d=fanSize.d;
   if(s.sofaBack===1)sofaBack.rotation.x=-Math.PI/2;
   applyShow();applyFloor();applyWardColor();Object.keys(colors).forEach(applyColor);applyPillows();buildSpots();applyFan();applyFanLamp();applyBedSpots();applyAmbiance();applyEntry();
-  syncFreeze();applyKitchenLights();syncDims();applyShowerType();applyBathTiles();applyBathFloorTiles();applyTileTone();syncShelfInputs();syncKWin2Inputs();syncCShelfInputs();applySitter();syncDimsBtn();
+  syncFreeze();applyKitchenLights();syncDims();applyShowerType();applyBathTiles();applyBathFloorTiles();applyTileTone();syncShelfInputs();syncKWin2Inputs();syncCShelfInputs();syncMirrorInputs();applySitter();syncDimsBtn();
   syncBedDoorBtns();syncTableBtn();syncSofaInputs();syncTableInputs();syncWardInputs();syncSofaBackBtn();fanIn.value=Math.round(fanSize.d*100);
   items.forEach(it=>clampItem(it));
   select(null);save();
@@ -3305,6 +3372,7 @@ document.getElementById('resetBtn').addEventListener('click',()=>{
   Object.assign(showState,{bed:true,sofa:true,table:true,chairs:true,wardrobe:true,fan:true,plant:true,garden:true,mountains:true,kitchen:true,shelf:true});applyShow();
   sofaBackTarget=0;sofaBackT=0;syncSofaBackBtn();sofaBack.rotation.x=0;
   shelfSize.w=0.65;shelfSize.d=0.60;shelfSize.y=0.86;shelfItem.w=shelfSize.w;shelfItem.d=shelfSize.d;buildShelf();shelfInfo();syncShelfInputs();
+  Object.assign(mirror,{w:0.45,h:0.60,y:1.10});mirrorItem.d=mirror.w;buildMirror();mirrorInfo();syncMirrorInputs();
   Object.assign(cshelf,{w:0.50,d:0.30,h:1.80,n:5,back:true,side:false});cshelfItem.w=cshelf.w;cshelfItem.d=cshelf.d;buildCShelf();cshelfInfo();syncCShelfInputs();
   kWin2.w=0.45;kWin2.h=0.35;kWin2.y=1.60;buildKitchenRight();syncKWin2Inputs();
   applyDefaults();tableTarget=1;syncTableBtn();select(null);save();
