@@ -1,23 +1,16 @@
 // Studio 3D : application Windows (Electron) autour de studio-3d.html.
 //
-// Le code affiché vient :
-//  - de la copie modifiable dans « Documents\Studio 3D » si elle existe (menu Code > Modifier le code),
-//  - sinon du fichier livré avec l'application.
-// Quand la copie modifiable change sur le disque, la fenêtre se recharge toute seule.
+// Le code affiché est toujours celui livré avec l'application (mis à jour par les Releases GitHub).
 const { app, BrowserWindow, Menu, shell, dialog, ipcMain, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 
 const BUNDLED_DIR = __dirname;
 const HTML = 'studio-3d.html';
 const USER_DIR = path.join(app.getPath('documents'), 'Studio 3D');
-const USER_HTML = path.join(USER_DIR, HTML);
 
 let win = null;
-let watcher = null;
-let reloadTimer = null;
 
 /* ---------- Journal de l'application (Aide > Ouvrir le journal) ----------
    Chaque étape des opérations sur les fichiers y est notée : si l'application se fige, le journal dit où. */
@@ -66,7 +59,7 @@ function addRecent(file) {
 function updateTitle() {
   if (!win) return;
   const name = doc.name ? doc.name + (doc.dirty ? ' •' : '') + ' — ' : '';
-  win.setTitle(name + 'Studio 3D' + (usingUserCopy() ? ' (version modifiée)' : ''));
+  win.setTitle(name + 'Studio 3D');
 }
 
 const sendMenu = (cmd, arg) => { if (win) win.webContents.send('menu', cmd, arg); };
@@ -90,7 +83,7 @@ function checkPage() {
   if (pageReady) return true;
   dialog.showMessageBox(win, {
     type: 'warning', message: 'Cette version du code ne gère pas encore le menu Fichier.',
-    detail: usingUserCopy() ? 'Tu utilises une copie modifiée du code, plus ancienne que l’application. Fais Code > Revenir à la version d’origine, ou recopie tes changements dans la nouvelle version.' : 'Recharge la page (Ctrl+R) puis réessaie.',
+    detail: 'Recharge la page (Ctrl+R) puis réessaie.',
   });
   return false;
 }
@@ -213,88 +206,14 @@ ipcMain.handle('secret:set', async (_, value) => {
 });
 ipcMain.on('app:alert', (_, msg) => { if (win) dialog.showMessageBox(win, { type: 'warning', message: String(msg) }); });
 
-let userCopy = null;   // mémorisé : évite d'interroger le dossier Documents à chaque changement de titre
-const usingUserCopy = () => (userCopy === null ? (userCopy = fs.existsSync(USER_HTML)) : userCopy);
-const currentHtml = () => (usingUserCopy() ? USER_HTML : path.join(BUNDLED_DIR, HTML));
-
-function copyDir(src, dst) {
-  fs.mkdirSync(dst, { recursive: true });
-  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
-    const s = path.join(src, e.name), d = path.join(dst, e.name);
-    if (e.isDirectory()) copyDir(s, d);
-    else if (!fs.existsSync(d)) fs.copyFileSync(s, d);
-  }
-}
-
-// Crée la copie modifiable (HTML + three.js) si elle n'existe pas encore.
-function ensureUserCopy() {
-  fs.mkdirSync(USER_DIR, { recursive: true });
-  if (!fs.existsSync(USER_HTML)) fs.copyFileSync(path.join(BUNDLED_DIR, HTML), USER_HTML);
-  copyDir(path.join(BUNDLED_DIR, 'vendor'), path.join(USER_DIR, 'vendor'));
-}
-
+// L'application affiche toujours le code livré avec elle (plus de copie modifiable).
 function load() {
   if (!win) return;
   pageReady = false;
-  userCopy = null;
-  log('chargement', currentHtml());
-  win.loadFile(currentHtml());
+  const file = path.join(BUNDLED_DIR, HTML);
+  log('chargement', file);
+  win.loadFile(file);
   updateTitle();
-  watch();
-}
-
-// Recharge automatiquement quand on enregistre le fichier dans l'éditeur.
-function watch() {
-  if (watcher) { watcher.close(); watcher = null; }
-  if (!usingUserCopy()) return;
-  try {
-    watcher = fs.watch(USER_DIR, (_, name) => {
-      if (name && name !== HTML) return;
-      clearTimeout(reloadTimer);
-      reloadTimer = setTimeout(load, 400);
-    });
-  } catch (e) { /* pas de rechargement automatique, Ctrl+R reste possible */ }
-}
-
-function openInEditor(file) {
-  if (process.platform === 'win32') {
-    // VS Code s'il est installé, sinon le Bloc-notes
-    const code = spawn('code', ['"' + file + '"'], { shell: true, detached: true, stdio: 'ignore', windowsHide: true });
-    code.on('exit', c => { if (c !== 0) spawn('notepad.exe', [file], { detached: true, stdio: 'ignore' }).unref(); });
-    code.unref();
-  } else {
-    shell.openPath(file);
-  }
-}
-
-function editCode() {
-  try {
-    const fresh = !usingUserCopy();
-    ensureUserCopy();
-    if (fresh) load();
-    openInEditor(USER_HTML);
-    shell.showItemInFolder(USER_HTML);
-  } catch (e) {
-    dialog.showErrorBox('Studio 3D', 'Impossible de préparer la copie modifiable :\n' + e.message);
-  }
-}
-
-async function restoreOriginal() {
-  if (!usingUserCopy()) {
-    await dialog.showMessageBox(win, { type: 'info', message: 'Tu utilises déjà la version d’origine.' });
-    return;
-  }
-  const r = await dialog.showMessageBox(win, {
-    type: 'warning',
-    buttons: ['Revenir à l’origine', 'Annuler'],
-    defaultId: 1, cancelId: 1,
-    message: 'Revenir à la version d’origine du code ?',
-    detail: 'Ta version modifiée sera gardée sous le nom « studio-3d.sauvegarde-<date>.html » dans ' + USER_DIR + '.\nTes plans et ton agencement ne sont pas touchés.',
-  });
-  if (r.response !== 0) return;
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  fs.renameSync(USER_HTML, path.join(USER_DIR, 'studio-3d.sauvegarde-' + stamp + '.html'));
-  load();
 }
 
 /* ---------- Mises à jour automatiques (depuis les Releases GitHub) ----------
@@ -321,8 +240,7 @@ function setupUpdater() {
       buttons: ['Redémarrer maintenant', 'Plus tard'],
       defaultId: 0, cancelId: 1,
       message: 'La version ' + info.version + ' de Studio 3D est prête.',
-      detail: 'Elle sera installée au redémarrage de l’application (sinon, à la prochaine fermeture). Tes plans sont conservés.' +
-        (usingUserCopy() ? '\n\nTu utilises une version modifiée du code : pour voir la nouvelle version, fais ensuite Code > Revenir à la version d’origine.' : ''),
+      detail: 'Elle sera installée au redémarrage de l’application (sinon, à la prochaine fermeture). Tes plans sont conservés.',
     });
     if (r.response === 0) autoUpdater.quitAndInstall();
   });
@@ -351,25 +269,13 @@ function buildMenu() {
     {
       label: 'Fichier',
       submenu: [
+        // les plans ne s'enregistrent que sur GitHub (dépôt privé) : plus d'enregistrement en fichier sur le PC
         { label: 'Nouveau plan', accelerator: 'CmdOrCtrl+N', click: newPlan },
-        { label: 'Ouvrir un plan…', accelerator: 'CmdOrCtrl+O', click: openPlan },
-        {
-          label: 'Ouvrir récent',
-          submenu: recent.length
-            ? recent.map(f => ({ label: path.basename(f, '.json'), sublabel: f, click: () => openPlanFile(f) }))
-            : [{ label: 'Aucun plan récent', enabled: false }],
-        },
-        {
-          label: 'Plans enregistrés dans l’application',
-          submenu: appPlans.length
-            ? appPlans.map(p => ({ label: p.name, click: () => { if (checkPage()) sendMenu('openPlan', p.id); } }))
-            : [{ label: 'Aucun plan', enabled: false }],
-        },
+        { label: 'Ouvrir…', accelerator: 'CmdOrCtrl+O', click: () => { if (checkPage()) sendMenu('githubDialog'); } },
+        { label: 'Enregistrer', accelerator: 'CmdOrCtrl+S', click: () => { if (checkPage()) sendMenu('githubSave'); } },
+        { label: 'Enregistrer sous…', accelerator: 'CmdOrCtrl+Shift+S', click: () => { if (checkPage()) sendMenu('githubDialog'); } },
         { type: 'separator' },
-        { label: 'Enregistrer', accelerator: 'CmdOrCtrl+S', click: save },
-        { label: 'Enregistrer sous…', accelerator: 'CmdOrCtrl+Shift+S', click: saveAs },
-        { label: 'Plans sur GitHub…', accelerator: 'CmdOrCtrl+G', click: () => { if (checkPage()) sendMenu('githubDialog'); } },
-        { label: 'Ouvrir le dossier des plans', click: () => { ensurePlansDir().then(d => shell.openPath(d), e => dialog.showErrorBox('Studio 3D', e.message)); } },
+        { label: 'Ouvrir le dossier GitHub', click: () => { if (checkPage()) sendMenu('githubFolder'); } },
         { type: 'separator' },
         { label: 'Recharger', accelerator: 'CmdOrCtrl+R', click: load },
         { type: 'separator' },
@@ -395,16 +301,6 @@ function buildMenu() {
         { label: 'Zoom avant', role: 'zoomIn' },
         { label: 'Zoom arrière', role: 'zoomOut' },
         { label: 'Taille réelle', role: 'resetZoom' },
-      ],
-    },
-    {
-      label: 'Code',
-      submenu: [
-        { label: 'Modifier le code…', accelerator: 'CmdOrCtrl+E', click: editCode },
-        { label: 'Ouvrir le dossier du code', click: () => { ensureUserCopy(); shell.openPath(USER_DIR); } },
-        { label: 'Revenir à la version d’origine…', click: restoreOriginal },
-        { type: 'separator' },
-        { label: 'Outils de développement', accelerator: 'F12', role: 'toggleDevTools' },
       ],
     },
     {
@@ -443,7 +339,7 @@ function createWindow() {
   win.on('unresponsive', () => log('la page ne répond plus'));
   win.on('responsive', () => log('la page répond de nouveau'));
   win.webContents.on('render-process-gone', (_, d) => log('page arrêtée :', d.reason));
-  win.on('closed', () => { win = null; if (watcher) watcher.close(); });
+  win.on('closed', () => { win = null; });
   load();
 }
 

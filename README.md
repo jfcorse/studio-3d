@@ -22,35 +22,23 @@ Rien à faire : chaque changement poussé sur la branche `main` (par exemple par
 
 Tout se fait dans le panneau : déplacer les meubles à la souris (les réglages de l'objet sélectionné s'affichent en haut), les faire pivoter (touche R), changer les tailles, les couleurs et les lumières. L'agencement est enregistré automatiquement sur l'ordinateur.
 
-Les plans se gèrent dans le menu **Fichier** :
+Les plans se gèrent dans le menu **Fichier** et sont enregistrés dans un **dépôt GitHub privé** : on retrouve les mêmes plans sur tous ses PC.
 
 - **Nouveau plan** (Ctrl+N) : repart de l'agencement d'origine ;
-- **Ouvrir un plan…** (Ctrl+O) et **Ouvrir récent** ;
-- **Enregistrer** (Ctrl+S) et **Enregistrer sous…** (Ctrl+Maj+S) : fichiers `.json`, par défaut dans `Documents\Studio 3D\Plans` ;
-- **Plans enregistrés dans l'application** : les plans gardés avec l'ancienne liste « Mes plans ».
+- **Ouvrir un plan…** (Ctrl+O) ;
+- **Enregistrer** (Ctrl+S) et **Enregistrer sous…** (Ctrl+Maj+S).
 
-Dans un navigateur, la section « Mes plans » du panneau reste disponible.
+Dans un navigateur, ce sont les boutons de la section « Mes plans » du panneau.
 
-### Plans sur GitHub
+### Connexion à GitHub
 
-**Fichier > Plans sur GitHub…** (Ctrl+G), ou le bouton du même nom dans « Mes plans » du navigateur, enregistre et ouvre les plans dans un **dépôt GitHub privé** (dossier `plans`). On retrouve ainsi les mêmes plans sur tous ses PC.
-
-À faire une seule fois :
+Les plans sont des fichiers `.json` dans le dossier `plans` du dépôt. À faire une seule fois :
 
 1. Sur GitHub, crée un dépôt **privé**, par exemple `studio-3d-plans` (coche « Add a README »).
 2. **Settings > Developer settings > Personal access tokens > Fine-grained tokens > Generate new token** : « Only select repositories » → ce dépôt ; **Permissions > Repository > Contents : Read and write**.
 3. Dans l'application, saisis le dépôt (`compte/studio-3d-plans`) et le jeton. À refaire sur chaque PC : dans l'application, le jeton est gardé chiffré par Windows.
 
-## Modifier le code depuis l'application
-
-Menu **Code** :
-
-- **Modifier le code…** (Ctrl+E) : copie le code dans `Documents\Studio 3D\` et l'ouvre dans VS Code (ou dans le Bloc-notes). Dès que tu enregistres le fichier, l'application se recharge avec tes changements.
-- **Ouvrir le dossier du code** : ouvre ce dossier dans l'explorateur.
-- **Revenir à la version d'origine…** : met ta version de côté (renommée en `studio-3d.sauvegarde-<date>.html`) et revient au code livré avec l'application.
-- **Outils de développement** (F12) : la console, pour voir les erreurs.
-
-Tes plans et ton agencement sont conservés quand tu passes d'une version à l'autre.
+Tes plans et ton agencement sont conservés quand l'application se met à jour.
 
 ## Développer sur l'ordinateur
 
@@ -69,7 +57,7 @@ npm run icon     # régénère build/icon.png
 | --- | --- |
 | `studio-3d.html` | toute la scène 3D et l'interface |
 | `vendor/` | three.js r128 en local, pour que l'application marche sans internet |
-| `main.js` | la fenêtre Windows, le menu et le mode « modifier le code » |
+| `main.js` | la fenêtre Windows, le menu, les mises à jour et la connexion GitHub des plans |
 | `package.json` | les dépendances et la configuration de construction (electron-builder) |
 | `build/` | l'icône et son script de génération |
 | `.github/workflows/windows.yml` | construit les `.exe` sur GitHub |

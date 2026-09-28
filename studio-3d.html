@@ -149,6 +149,9 @@ button.ghost{border-color:var(--line);color:var(--muted)}
   background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:12px;
   padding:8px 14px;font-size:.85rem;color:var(--ink);text-align:center}
 .walkhelp[hidden]{display:none}
+.walkhelp .recul{display:inline-flex;align-items:center;gap:8px;font-weight:600;margin-bottom:4px}
+.walkhelp .recul input{width:160px;accent-color:var(--accent)}
+.walkhelp .recul span{min-width:40px;text-align:right;font-variant-numeric:tabular-nums;font-weight:500}
 .error{position:fixed;inset:0;display:none;place-items:center;padding:24px;text-align:center;color:var(--muted)}
 @media (max-width:520px){
   .panel{left:8px;right:8px;width:auto;margin-bottom:calc(8px + env(safe-area-inset-bottom,0px));padding:12px 14px;max-height:calc(100% - 130px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
@@ -283,7 +286,7 @@ button.ghost{border-color:var(--line);color:var(--muted)}
         <button data-shower="two" aria-pressed="true">2 coulissants · passage 60 cm</button>
         <button data-shower="one" aria-pressed="false">1 coulissant · passage 46 cm</button>
         <button data-shower="swing" aria-pressed="false">Battante · 60 cm</button>
-        <button data-shower="swing2" aria-pressed="false">2 battants · 2 × 30 cm</button>
+        <button data-shower="swing2" aria-pressed="false">2 battants · toute la largeur</button>
       </div>
       <p class="swlabel">Faïence marbre sur les murs de la douche (jusqu'à 2,02 m, hauteur de la paroi)</p>
       <div class="seg" style="flex-wrap:wrap">
@@ -370,15 +373,20 @@ button.ghost{border-color:var(--line);color:var(--muted)}
 
   <details class="acc" data-acc="plans">
     <summary>Mes plans</summary>
-    <div class="planrow">
+    <p class="note" style="margin:0 0 8px">Les plans sont enregistrés dans ton dépôt GitHub privé, et donc retrouvés sur tous tes PC.</p>
+    <div class="actions" style="margin:0 0 4px">
+      <button id="planGithubSave">Enregistrer</button>
+      <button id="planGithub" class="ghost">Ouvrir / Enregistrer sous…</button>
+      <button id="planGithubFolder" class="ghost">Ouvrir le dossier GitHub</button>
+    </div>
+    <div class="planrow" hidden>
       <input type="text" id="planName" placeholder="Nom du plan, ex. Version canapé sous le lit" maxlength="60" aria-label="Nom du plan">
       <button id="planSave">Enregistrer</button>
     </div>
-    <ul class="plans" id="planList"><li class="empty">Chargement des plans…</li></ul>
-    <div class="actions">
+    <ul class="plans" id="planList" hidden><li class="empty">Chargement des plans…</li></ul>
+    <div class="actions" hidden>
       <button id="planExport" class="ghost">Exporter en fichier</button>
       <button id="planImport" class="ghost">Importer un fichier</button>
-      <button id="planGithub" class="ghost">Plans sur GitHub…</button>
       <input type="file" id="planFile" accept=".json,application/json" hidden>
     </div>
     <p class="note" id="planNote" style="margin:8px 0 0" hidden></p>
@@ -456,7 +464,7 @@ button.ghost{border-color:var(--line);color:var(--muted)}
     <p class="hint">Clique sur un meuble : ses réglages s'affichent en haut du panneau. Glisse-le pour le déplacer, touche R pour le pivoter, touche Suppr pour supprimer un élément du décor (arbre, plante, chaise…). Le lit et la table se déplacent aussi mais restent toujours fixés au mur le plus proche. Glisser dans le vide fait tourner la vue, molette ou pincer pour zoomer. La disposition est gardée sur cet appareil.</p>
   </details>
 </div>
-<div class="walkhelp" id="walkHelp" hidden>Promenade à hauteur d'yeux (personne de <span id="walkHTxt">1,75 m</span>) — <strong>↑ ↓</strong> avancer / reculer · <strong>← →</strong> tourner · <strong>Maj</strong> + flèches : pas de côté · glisser la souris : regarder · <strong>Échap</strong> : quitter</div>
+<div class="walkhelp" id="walkHelp" hidden><label class="recul">Recul <input type="range" id="walkFov" min="0" max="100" step="5" value="0" aria-label="Recul, en pourcentage"> <span id="walkFovTxt">0 %</span></label><br>Promenade à hauteur d'yeux (personne de <span id="walkHTxt">1,75 m</span>) — <strong>↑ ↓</strong> avancer / reculer · <strong>← →</strong> tourner · <strong>Maj</strong> + flèches : pas de côté · glisser la souris : regarder · <strong>Échap</strong> : quitter</div>
 <div class="error" id="err">La vue 3D n'a pas pu se charger. Vérifie que WebGL est activé dans le navigateur.</div>
 
 <!-- three.js : copie locale (dossier vendor/, utilisée par l'application Windows hors ligne), sinon CDN -->
@@ -605,6 +613,16 @@ function validateWalkH(){
   validateWalkH.t=setTimeout(()=>{ok.classList.remove('done');tip(ok,'Valider la taille');},1500);
 }
 document.getElementById('walkH').addEventListener('change',validateWalkH);
+// recul en promenade : élargit le champ de vision, de 65° (0 %) à 115° (100 %)
+walk.recul=0;
+const walkFovDeg=()=>65+walk.recul*0.5;
+function setWalkRecul(v){
+  walk.recul=Math.max(0,Math.min(100,Math.round(+v||0)));
+  document.getElementById('walkFov').value=walk.recul;document.getElementById('walkFovTxt').textContent=walk.recul+' %';
+  if(walk.on){camera.fov=walkFovDeg();camera.updateProjectionMatrix();}
+}
+document.getElementById('walkFov').addEventListener('input',e=>setWalkRecul(e.target.value));
+document.getElementById('walkFov').addEventListener('change',e=>{save();e.target.blur();});
 document.getElementById('walkH').addEventListener('keydown',e=>{if(e.key==='Enter'){validateWalkH();e.target.blur();}});
 document.getElementById('walkHOk').addEventListener('click',e=>{validateWalkH();e.currentTarget.blur();});
 setWalkHeight(175);
@@ -647,7 +665,7 @@ function setWalk(on){
     let x=controls.target.x,z=controls.target.z;
     if(!canWalk(x,z)){x=W-0.9;z=D-0.6;}
     camera.position.set(x,walk.eye,z);walk.yaw=Math.atan2(-dir.x,-dir.z);walk.pitch=0;
-    camera.fov=65;camera.updateProjectionMatrix();
+    camera.fov=walkFovDeg();camera.updateProjectionMatrix();
   }else{
     camera.position.copy(walk.saved.cam);controls.target.copy(walk.saved.tgt);camera.fov=walk.saved.fov;camera.updateProjectionMatrix();
     controls.enabled=true;controls.update();
@@ -1069,6 +1087,13 @@ const bathWallG={
   z1:wall(0,1,(g,m)=>box(g,m,SBX0-KT,SBX1+KT,0,H,SBZ1,SBZ1+KT)),
 };
 Object.values(bathWallG).forEach(g=>kitchenWalls.push(g));
+// Plafonds blancs (pièce principale, cuisine, salle de bain) : plans tournés vers le bas, donc visibles
+// seulement depuis l'intérieur ; vus de dessus (vue d'ensemble), ils disparaissent d'eux-mêmes.
+M.ceiling=new THREE.MeshStandardMaterial({color:0xfbfbf9,roughness:0.9,emissive:0x2a2a2a});   // légère auto-illumination : reste blanc même peu éclairé
+[[scene,0,W,0,D],[kitchenG,KX1-0.01,KX0,KZ0,KZ1],[kitchenG,SBX0,SBX1,SBZ0,SBZ1]].forEach(([par,x0,x1,z0,z1])=>{
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(x1-x0,z1-z0),M.ceiling);
+  m.rotation.x=Math.PI/2;m.position.set((x0+x1)/2,H-0.001,(z0+z1)/2);m.receiveShadow=true;par.add(m);
+});
 
 /* ---------- Faïence murale de la salle de bain : brèche de marbre blanc veiné de rouge ----------
    Une plaque de 120 cm puis une plaque coupée à 2,02 m (hauteur de la paroi de douche), seulement dans la douche,
@@ -1266,12 +1291,10 @@ const wcG=new THREE.Group(),basinG=new THREE.Group(),showerColG=new THREE.Group(
   box(leafD,M.showerFrame,-0.008,0.008,0.10,0.20,0,0.03,false);   // charnières
   box(leafD,M.showerFrame,-0.008,0.008,1.80,1.90,0,0.03,false);
   box(leafD,M.showerFrame,-0.024,0.024,0.95,1.25,LW-0.06,LW-0.045,false);   // poignée des deux côtés
-  //  - 2 portes battantes de 30 cm (charnières côté mur et côté partie fixe) qui s'ouvrent vers l'intérieur,
-  //    et une partie fixe de 40 cm : passage 60 cm.
+  //  - 2 portes battantes sur toute la largeur (2 × 47 cm environ, charnières contre les deux murs),
+  //    qui s'ouvrent vers l'intérieur de la douche ; pas de partie fixe.
   const swing2G=new THREE.Group();showerG.add(swing2G);
-  box(swing2G,M.showerGlass,gx+0.020,gx+0.028,0.07,1.98,SWZ,SZ1-0.025,false);   // partie fixe
-  box(swing2G,M.showerFrame,gx+0.016,gx+0.032,0.07,1.98,SWZ,SWZ+0.015,false);
-  const LW2=(SWZ-SZ0-0.045)/2;
+  const LW2=(SZ1-SZ0-0.065)/2;
   const leaf2=dir=>{   // repère local : charnière en z=0, le vantail s'étend vers +z (dir=1) ou −z (dir=−1)
     const g=new THREE.Group(),za=Math.min(0,dir*LW2),zb=Math.max(0,dir*LW2);
     box(g,M.showerGlass,-0.004,0.004,0.075,1.975,za,zb,false);
@@ -1281,7 +1304,7 @@ const wcG=new THREE.Group(),basinG=new THREE.Group(),showerColG=new THREE.Group(
     return g;
   };
   const leafE=leaf2(1),leafF=leaf2(-1);
-  leafE.position.set(gx+0.004,0,SZ0+0.03);leafF.position.set(gx+0.004,0,SWZ-0.005);swing2G.add(leafE,leafF);
+  leafE.position.set(gx+0.004,0,SZ0+0.03);leafF.position.set(gx+0.004,0,SZ1-0.03);swing2G.add(leafE,leafF);
   box(showerG,M.showerFrame,SX0,SX0+0.05,1.98,2.02,SZ0,SZ1,false);   // rail haut
   box(showerG,M.showerFrame,SX0,SX0+0.05,0.05,0.07,SZ0,SZ1,false);   // rail bas
   box(showerG,M.showerFrame,SX0,SX0+0.05,0.05,2.02,SZ0,SZ0+0.025,false);   // montants muraux
@@ -1913,7 +1936,7 @@ function applyFanLamp(){
 function applyShowerType(){
   Object.keys(showerModels).forEach(k=>showerModels[k].visible=showerType===k);
   showerItem.info='100 × 70 cm, bac blanc, colonne de douche, '+
-    (showerType==='one'?'porte coulissante en verre à une vitre (passage 46 cm)':showerType==='swing'?'porte battante en verre de 60 cm qui s\u2019ouvre vers l\u2019intérieur de la douche':showerType==='swing2'?'2 portes battantes en verre de 30 cm qui s\u2019ouvrent vers l\u2019intérieur (passage 60 cm)':'porte coulissante en verre de 2 × 30 cm (passage 60 cm)')+' ; clique sur la porte pour l\u2019ouvrir';
+    (showerType==='one'?'porte coulissante en verre à une vitre (passage 46 cm)':showerType==='swing'?'porte battante en verre de 60 cm qui s\u2019ouvre vers l\u2019intérieur de la douche':showerType==='swing2'?'2 portes battantes en verre sur toute la largeur, qui s\u2019ouvrent vers l\u2019intérieur (sans partie fixe)':'porte coulissante en verre de 2 × 30 cm (passage 60 cm)')+' ; clique sur la porte pour l\u2019ouvrir';
   document.querySelectorAll('[data-shower]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.shower===showerType)));
   if(selected===showerItem)showSel(showerItem);
 }
@@ -2637,7 +2660,7 @@ document.querySelectorAll('[data-show]').forEach(b=>b.addEventListener('click',(
   const k=b.dataset.show;showState[k]=!showState[k];applyShow();save();
 }));
 function getState(){
-  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),cshelf:Object.assign({},cshelf),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),bathFloorTiles:Object.assign({},bathFloorTiles),tileTone,dayLevel,sitter:sitterOn,dimsOn,wcCorner,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
+  const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),cshelf:Object.assign({},cshelf),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),bathFloorTiles:Object.assign({},bathFloorTiles),tileTone,dayLevel,sitter:sitterOn,dimsOn,wcCorner,walkRecul:walk.recul,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
   items.forEach(it=>o.items[it.id]={x:it.obj.position.x,z:it.obj.position.z,r:it.obj.rotation.y});
   return JSON.parse(JSON.stringify(o));
 }
@@ -2692,6 +2715,7 @@ function loadInto(s){
   if(s&&typeof s.tileTone==='number')tileTone=Math.max(-50,Math.min(50,s.tileTone));
   if(s&&typeof s.dayLevel==='number')dayLevel=Math.max(30,Math.min(160,s.dayLevel));
   if(s&&typeof s.walkH==='number')setWalkHeight(s.walkH);
+  if(s&&typeof s.walkRecul==='number')setWalkRecul(s.walkRecul);
   if(s&&typeof s.sitter==='boolean')sitterOn=s.sitter;
   if(s&&typeof s.dimsOn==='boolean')dimsOn=s.dimsOn;
   if(s&&s.dim)Object.keys(dim).forEach(k=>{const v=+s.dim[k];if(v>=5&&v<=100)dim[k]=v;});
@@ -2911,29 +2935,40 @@ async function ghOpen(cfg,file){
   const j=JSON.parse(b64dec(f.content)),st=j&&j.state?j.state:j;
   if(!st||!st.items)throw new Error('ce fichier n\u2019est pas un plan du studio');
   applyPlan(st);
-  const name=j.name||file.name.replace(/\.json$/i,'');
+  const name=j.name||file.name.replace(/\.json$/i,'');ghCurName=name;
   if(window.onPlanOpened)window.onPlanOpened(name);
-  const el=document.getElementById('autosave');if(el)el.textContent='Plan « '+name+' » ouvert depuis GitHub.';
+  const el=document.getElementById('autosave');if(el)el.textContent='Plan « '+name+' » ouvert.';
   return name;
 }
 const ghDlg=document.createElement('dialog');ghDlg.className='appdlg';document.body.appendChild(ghDlg);
 const ghEsc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function ghShow(html){ghDlg.innerHTML=html;if(!ghDlg.open)ghDlg.showModal();ghDlg.querySelectorAll('[data-a=cancel]').forEach(b=>b.onclick=()=>ghDlg.close());}
+let ghCurName='';   // plan GitHub en cours (ouvert ou enregistré)
+const ghPlanName=()=>(window.currentPlanName&&window.currentPlanName())||ghCurName;
+async function githubSaveQuick(){   // Ctrl+S : enregistre le plan en cours sur GitHub sous son nom, sinon ouvre la fenêtre
+  const cfg=await ghStore.get(),name=ghPlanName();
+  if(!cfg||!cfg.repo||!cfg.token||!name){githubDialog();return;}
+  const el=document.getElementById('autosave');
+  try{if(el)el.textContent='Enregistrement du plan « '+name+' »…';await ghSave(cfg,name);ghCurName=name;if(window.onPlanOpened)window.onPlanOpened(name);
+    if(el)el.textContent='Plan « '+name+' » enregistré.';}
+  catch(e){if(el)el.textContent='Enregistrement impossible : '+(e&&e.message||e);githubDialog();}
+}
 async function githubDialog(){
   const cfg=await ghStore.get();
   if(!cfg||!cfg.repo||!cfg.token){ghSetup();return;}
-  ghShow('<h3>Plans sur GitHub</h3><p>Dépôt <strong>'+ghEsc(cfg.repo)+'</strong> — lecture des plans…</p><div class="dlgbtns"><button class="ghost" data-a="cancel">Fermer</button></div>');
+  ghShow('<h3>Mes plans</h3><p>Lecture des plans…</p><div class="dlgbtns"><button class="ghost" data-a="cancel">Fermer</button></div>');
   let files;
   try{files=await ghList(cfg);}catch(e){ghSetup(cfg,'Connexion impossible : '+e.message);return;}
   if(!ghDlg.open)return;
-  const def=(window.currentPlanName&&window.currentPlanName())||'Plan du studio';
-  ghShow('<h3>Plans sur GitHub</h3><p>Dépôt <strong>'+ghEsc(cfg.repo)+'</strong></p>'+
+  const def=ghPlanName()||'Plan du studio';
+  ghShow('<h3>Mes plans</h3>'+
     '<p style="margin:0 0 6px">Enregistrer le plan actuel sous :</p>'+
     '<div class="planrow"><input type="text" id="ghName" maxlength="80" aria-label="Nom du plan" value="'+ghEsc(def)+'"><button id="ghSave" aria-pressed="true">Enregistrer</button></div>'+
     '<p class="warn" id="ghWarn" hidden></p>'+
     '<p style="margin:10px 0 6px">Ouvrir un plan :</p>'+(files.length
       ?'<ul>'+files.map((f,i)=>'<li><button data-i="'+i+'"><span>'+ghEsc(f.name.replace(/\.json$/i,''))+'</span><span class="d">'+Math.max(1,Math.round(f.size/1024))+' Ko</span></button></li>').join('')+'</ul>'
-      :'<p>Aucun plan sur GitHub pour l\u2019instant.</p>')+
+      :'<p>Aucun plan enregistré pour l\u2019instant.</p>')+
+    '<p class="note" style="margin:10px 0 0">Enregistrés dans ton dépôt GitHub privé '+ghEsc(cfg.repo)+'.</p>'+
     '<div class="dlgbtns"><button class="ghost left" data-a="setup">Changer de dépôt ou de jeton</button><button class="ghost" data-a="cancel">Fermer</button></div>');
   const warn=ghDlg.querySelector('#ghWarn'),inp=ghDlg.querySelector('#ghName'),sv=ghDlg.querySelector('#ghSave');
   const fail=e=>{warn.hidden=false;warn.textContent='Problème : '+(e&&e.message||e);sv.disabled=false;};
@@ -2943,10 +2978,10 @@ async function githubDialog(){
   sv.onclick=async()=>{
     const name=inp.value.trim();if(!name){inp.focus();return;}
     const exists=files.some(f=>f.name===ghFileName(name));
-    if(exists&&confirmFor!==name){confirmFor=name;warn.hidden=false;warn.textContent='Un plan « '+name+' » existe déjà sur GitHub : clique encore sur « Remplacer » pour l\u2019écraser.';sv.textContent='Remplacer';return;}
+    if(exists&&confirmFor!==name){confirmFor=name;warn.hidden=false;warn.textContent='Un plan « '+name+' » existe déjà : clique encore sur « Remplacer » pour l\u2019écraser.';sv.textContent='Remplacer';return;}
     sv.disabled=true;sv.textContent='Envoi…';
-    try{await ghSave(cfg,name);ghDlg.close();if(window.onPlanOpened)window.onPlanOpened(name);
-      const el=document.getElementById('autosave');if(el)el.textContent='Plan « '+name+' » enregistré sur GitHub ('+cfg.repo+').';}
+    try{await ghSave(cfg,name);ghCurName=name;ghDlg.close();if(window.onPlanOpened)window.onPlanOpened(name);
+      const el=document.getElementById('autosave');if(el)el.textContent='Plan « '+name+' » enregistré.';}
     catch(e){fail(e);sv.textContent='Enregistrer';}
   };
   ghDlg.querySelectorAll('li button').forEach(b=>b.onclick=async()=>{
@@ -2989,6 +3024,15 @@ function ghSetup(cfg,err){
   if(fg)fg.onclick=async()=>{await ghStore.set(null);ghDlg.close();};
 }
 document.getElementById('planGithub').addEventListener('click',githubDialog);
+document.getElementById('planGithubSave').addEventListener('click',githubSaveQuick);
+async function githubFolder(){   // ouvre le dossier des plans du dépôt dans le navigateur
+  const cfg=await ghStore.get();
+  if(!cfg||!cfg.repo){ghSetup();return;}
+  window.open('https://github.com/'+cfg.repo+'/tree/HEAD/plans','_blank');
+}
+document.getElementById('planGithubFolder').addEventListener('click',githubFolder);
+// navigateur : Ctrl+S / Ctrl+O passent aussi par GitHub (dans l'application, c'est le menu Fichier)
+if(!window.studioApp)window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&(e.key==='s'||e.key==='o')){e.preventDefault();(e.key==='s'?githubSaveQuick:githubDialog)();}});
 
 /* ---------- Application Windows : les plans passent par le menu Fichier ----------
    Dans l'application, « Mes plans » quitte le panneau : Fichier > Nouveau, Ouvrir, Ouvrir récent,
@@ -2997,7 +3041,7 @@ document.getElementById('planGithub').addEventListener('click',githubDialog);
 const desktop=window.studioApp||null;
 if(desktop){
   const plansAcc=document.querySelector('details.acc[data-acc="plans"]');
-  if(plansAcc){plansAcc.open=false;plansAcc.hidden=true;}
+  if(plansAcc){plansAcc.open=false;plansAcc.hidden=true;}   // dans l'application : menu Fichier (Ctrl+O, Ctrl+S)
   let curPath=null,curName='',dirty=false;
   const baseName=p=>(p||'').split(/[\\/]/).pop().replace(/\.json$/i,'');
   const syncTitle=()=>desktop.setDocument({name:curName,path:curPath,dirty});
@@ -3098,6 +3142,8 @@ if(desktop){
       else if(cmd==='openDialog')await openDialog();
       else if(cmd==='newDialog')newDialog();
       else if(cmd==='githubDialog')await githubDialog();
+      else if(cmd==='githubSave')await githubSaveQuick();
+      else if(cmd==='githubFolder')await githubFolder();
       else if(cmd==='new')newPlan();
       else if(cmd==='opened')loadPlanJson(arg.data,arg.path);
       else if(cmd==='openPlan'){const p=plansCache.find(x=>x.id===arg);if(p&&p.state){applyPlan(p.state);curPath=null;curName=p.name||'';dirty=true;syncTitle();showMsg('Plan « '+curName+' » ouvert. Fichier > Enregistrer sous pour le garder dans un fichier.');}}
