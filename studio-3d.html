@@ -120,6 +120,7 @@ button.ghost{border-color:var(--line);color:var(--muted)}
 .seldist{color:var(--accent);font-weight:500}
 .sizes{display:none;gap:8px;margin:0 0 10px}
 .sizes.on{display:flex}
+#shelfSizes{flex-wrap:wrap}#shelfSizes label{flex:1 1 40%}   /* 4 réglages : deux par ligne */
 #tableSizes.on{display:flex}
 .note{margin:-4px 0 10px;font-size:.78rem;color:var(--muted)}
 .sizes label{display:flex;flex-direction:column;gap:3px;font-size:.78rem;color:var(--muted);flex:1}
@@ -2651,6 +2652,7 @@ function applyWardColor(){
   M.rusticIn.color.set(shade(wardColor,0.3));
   renderSwatches('wardSwatches',WARD_PRESETS,wardColor,c=>{wardColor=c;applyWardColor();save();});
 }
+const WORKTOP_HEX='#262626';   // teinte « comme le plan de travail » : reprend sa texture noire grainée
 const COLOR_PRESETS={
   bedFrame:[['Gris clair','#c9ccd0'],['Blanc','#f1f0ec'],['Anthracite','#4a4f55'],['Noir','#26282b'],['Chêne','#c9a36d'],['Noyer','#6f4a30']],
   bedPanel:[['Jaune','#e6c65a'],['Blanc','#f1f0ec'],['Vert sauge','#a7b39a'],['Bleu','#7fa3bf'],['Terracotta','#c9775a'],['Gris','#9aa0a6'],['Chêne','#c9a36d']],
@@ -2669,7 +2671,7 @@ const COLOR_PRESETS={
   mirrorFrame:[['Noir','#2b2b2b'],['Blanc','#f1efe9'],['Chromé','#dfe2e5'],['Doré','#c9a44c'],['Chêne clair','#cfae80'],['Noyer','#6f4a30']],
   cshelfBoard:[['Noyer','#6f4a30'],['Chêne clair','#cfae80'],['Chêne naturel','#b8894f'],['Blanc','#f1efe9'],['Gris béton','#9a9a95'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Vert sauge','#a7b39a']],
   cshelf:[['Blanc','#f1efe9'],['Chêne clair','#cfae80'],['Chêne naturel','#b8894f'],['Noyer','#6f4a30'],['Gris béton','#9a9a95'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Vert sauge','#a7b39a']],
-  shelf:[['Chêne clair','#cfae80'],['Chêne naturel','#b8894f'],['Noyer','#6f4a30'],['Blanc','#f1efe9'],['Gris béton','#9a9a95'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Vert sauge','#a7b39a']],
+  shelf:[['Comme le plan de travail (noir mat grainé)',WORKTOP_HEX],['Chêne clair','#cfae80'],['Chêne naturel','#b8894f'],['Noyer','#6f4a30'],['Blanc','#f1efe9'],['Gris béton','#9a9a95'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Vert sauge','#a7b39a']],
   basin:[['Rouge','#b3262e'],['Blanc','#f1efe9'],['Gris clair','#c9ccd0'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Chêne clair','#cfae80'],['Bleu','#5d7fa3'],['Vert sauge','#a7b39a']],
   kwin2:[['Blanc','#f4f3ef'],['Gris clair','#c9ccd0'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Chêne clair','#cfae80'],['Noyer','#6f4a30']],
   washerRing:[['Chromé','#dfe2e5'],['Blanc','#f2f2f0'],['Gris','#9a9ea3'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Doré','#c9a44c'],['Cuivre','#b87333'],['Rouge','#b3262e']],
@@ -2709,6 +2711,10 @@ function applyColor(k){
     if(k==='armWood')M.oakIn.color.set(shade(colors[k],0.25));
     if(k==='sofaFabric')M.sofaDark.color.set(shade(colors[k],-0.15));
     if(k==='bathDoor'&&bathDoorStyle!=='paint')applyBathDoorStyle();
+    if(k==='shelf'){
+      const top=colors[k].toLowerCase()===WORKTOP_HEX;
+      M.shelf.map=top?M.kTop.map:null;M.shelf.roughness=top?M.kTop.roughness:0.45;if(top)M.shelf.color.set('#ffffff');M.shelf.needsUpdate=true;
+    }
   }
   renderSwatches(sw,COLOR_PRESETS[k]||COLOR_PRESETS[k.startsWith('wall')?'wall':k],colors[k],c=>{colors[k]=c;applyColor(k);save();});
   const room=Object.keys(WALL_ROOMS).find(r=>WALL_ROOMS[r].keys.includes(k));
