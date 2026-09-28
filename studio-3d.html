@@ -527,6 +527,9 @@ button.ghost{border-color:var(--line);color:var(--muted)}
       <button id="bedBoxBtn" aria-pressed="false">Coffrage autour du lit</button>
     </div>
     <p class="note" style="margin:8px 0 0">Le lit monté s'arrête sous le faux plafond. Le coffrage l'entoure du plafond (ou du faux plafond) jusqu'au dessous du lit monté : le matelas et le sommier sont cachés, seul le dessous du lit reste visible.</p>
+    <p class="swlabel" style="margin-top:10px">Couleur du coffrage : devant</p><div class="swatches" id="bedBoxFrontSw"></div>
+    <p class="swlabel">Côté gauche (vu depuis la pièce, face au lit)</p><div class="swatches" id="bedBoxLeftSw"></div>
+    <p class="swlabel">Côté droit</p><div class="swatches" id="bedBoxRightSw"></div>
   </details>
 </div>
 <div class="walkhelp" id="walkHelp" hidden><label class="recul">Recul <input type="range" id="walkFov" min="0" max="100" step="5" value="0" aria-label="Recul, en pourcentage"> <span id="walkFovTxt">0 %</span></label><br>Promenade à hauteur d'yeux (personne de <span id="walkHTxt">1,75 m</span>) — <strong>↑ ↓</strong> avancer / reculer · <strong>← →</strong> tourner · <strong>Maj</strong> + flèches : pas de côté · glisser la souris : regarder · <strong>Échap</strong> : quitter</div>
@@ -2066,6 +2069,8 @@ const fauxG={studio:new THREE.Group(),kitchen:new THREE.Group(),bath:new THREE.G
 scene.add(fauxG.studio);kitchenG.add(fauxG.kitchen,fauxG.bath);
 const bedBoxG=new THREE.Group();bedUnit.add(bedBoxG);
 const BB=0.025;   // épaisseur du coffrage
+// une teinte par face du coffrage (blanc plafond par défaut)
+['bedBoxFront','bedBoxLeft','bedBoxRight'].forEach(k=>M[k]=new THREE.MeshStandardMaterial({color:0xfbfbf9,roughness:0.9,emissive:0x1a1a1a}));
 function ceilPlane(g,x0,x1,z0,z1,y){
   if(x1-x0<0.005||z1-z0<0.005)return;
   const m=new THREE.Mesh(new THREE.PlaneGeometry(x1-x0,z1-z0),M.ceiling);
@@ -2080,9 +2085,9 @@ function buildFaux(){
   if(fauxCeil.bath.on)ceilPlane(fauxG.bath,SBX0,SBX1,SBZ0,SBZ1,fauxCeil.bath.h);
   if(fauxCeil.bedBox){   // coffrage : devant et deux côtés, du plafond jusqu'au dessous du lit monté
     const top=ceilY('studio'),y0=bedHigh();
-    box(bedBoxG,M.ceiling,BX0-BB,BX1+BB,y0,top,BZ+0.005,BZ+BB);
-    box(bedBoxG,M.ceiling,BX0-BB,BX0-0.003,y0,top,0,BZ+0.005);
-    box(bedBoxG,M.ceiling,BX1+0.003,BX1+BB,y0,top,0,BZ+0.005);
+    box(bedBoxG,M.bedBoxFront,BX0-BB,BX1+BB,y0,top,BZ+0.005,BZ+BB);   // devant
+    box(bedBoxG,M.bedBoxLeft,BX0-BB,BX0-0.003,y0,top,0,BZ+0.005);     // côté gauche vu depuis la pièce (x < 0)
+    box(bedBoxG,M.bedBoxRight,BX1+0.003,BX1+BB,y0,top,0,BZ+0.005);    // côté droit
   }
   spotsG.position.y=ceilY('studio')-H;
   kCeilG.position.y=ceilY('kitchen')-H;
@@ -2830,6 +2835,7 @@ const COLOR_PRESETS={
   mirrorFrame:[['Noir','#2b2b2b'],['Blanc','#f1efe9'],['Chromé','#dfe2e5'],['Doré','#c9a44c'],['Chêne clair','#cfae80'],['Noyer','#6f4a30']],
   cshelfBoard:[['Noyer','#6f4a30'],['Chêne clair','#cfae80'],['Chêne naturel','#b8894f'],['Blanc','#f1efe9'],['Gris béton','#9a9a95'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Vert sauge','#a7b39a']],
   cshelf:[['Blanc','#f1efe9'],['Chêne clair','#cfae80'],['Chêne naturel','#b8894f'],['Noyer','#6f4a30'],['Gris béton','#9a9a95'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Vert sauge','#a7b39a']],
+  bedBox:[['Blanc plafond','#fbfbf9'],['Blanc cassé','#f1efe9'],['Gris perle','#d9dad8'],['Beige','#dccfb8'],['Chêne clair','#cfae80'],['Noyer','#6f4a30'],['Gris anthracite','#4a4f55'],['Vert sauge','#a7b39a'],['Bleu gris','#7a8b95'],['Jaune du lit','#e6c65a']],
   fireFrame:[['Noir','#1f2124'],['Anthracite','#4a4f55'],['Gris acier','#8d9399'],['Blanc','#f1efe9'],['Chêne clair','#cfae80'],['Noyer','#6f4a30']],
   art1:[['Terre cuite','#c4553a'],['Bleu canard','#2f6f8f'],['Ocre','#d9a93a'],['Vert sauge','#7f9a72'],['Rose poudré','#d8a3a0'],['Bleu nuit','#27335a'],['Gris','#8c8c8c'],['Bordeaux','#7a2331']],
   shelf:[['Comme le plan de travail (noir mat grainé)',WORKTOP_HEX],['Chêne clair','#cfae80'],['Chêne naturel','#b8894f'],['Noyer','#6f4a30'],['Blanc','#f1efe9'],['Gris béton','#9a9a95'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Vert sauge','#a7b39a']],
@@ -2840,7 +2846,7 @@ const COLOR_PRESETS={
   washer:[['Blanc','#f2f2f0'],['Gris clair','#c9ccd0'],['Inox','#b5b9bc'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Rouge','#b3262e'],['Bleu','#5d7fa3'],['Vert sauge','#a7b39a']],
   armWood:[['Chêne','#cfae80'],['Châtaignier','#9a6a40'],['Noyer','#6f4a30'],['Merisier','#98492b'],['Blanc','#f1efe9'],['Vert d\'eau','#b9cbbf'],['Bleu gris','#8d9ea8']]
 };
-const colors={fireFrame:'#1f2124',art1:'#c4553a',art2:'#2f6f8f',art3:'#d9a93a',bedFrame:'#c9ccd0',bedPanel:'#e6c65a',bedLinen:'#d9dde3',armWood:'#cfae80',sofaFabric:'#8f9c98',tableWood:'#cfae80',chairWood:'#cfae80',chairFrame:'#3a3f43',reveal:'#f6f5f1',wallBack:'#f6f5f1',wallLeft:'#f6f5f1',wallRight:'#f6f5f1',wallFront:'#f6f5f1',kitchenFloor:'#8a4a33',bathFloor:'#e6e5e0',bathDoor:'#f1f0ec',showerFrame:'#c8ccd0',washer:'#f2f2f0',washerRing:'#dfe2e5',washerPort:'#1d2327',shelf:'#cfae80',cshelf:'#f1efe9',cshelfBoard:'#6f4a30',mirrorFrame:'#2b2b2b',basin:'#b3262e',kwin2:'#f4f3ef',wallKFar:'#f6f5f1',wallKRight:'#f6f5f1',wallKDoor:'#f6f5f1',wallKStudio:'#f6f5f1',wallBShower:'#f6f5f1',wallBBack:'#f6f5f1',wallBBasin:'#f6f5f1',wallBDoor:'#f6f5f1',bathTaps:'#dfe2e5'};
+const colors={bedBoxFront:'#fbfbf9',bedBoxLeft:'#fbfbf9',bedBoxRight:'#fbfbf9',fireFrame:'#1f2124',art1:'#c4553a',art2:'#2f6f8f',art3:'#d9a93a',bedFrame:'#c9ccd0',bedPanel:'#e6c65a',bedLinen:'#d9dde3',armWood:'#cfae80',sofaFabric:'#8f9c98',tableWood:'#cfae80',chairWood:'#cfae80',chairFrame:'#3a3f43',reveal:'#f6f5f1',wallBack:'#f6f5f1',wallLeft:'#f6f5f1',wallRight:'#f6f5f1',wallFront:'#f6f5f1',kitchenFloor:'#8a4a33',bathFloor:'#e6e5e0',bathDoor:'#f1f0ec',showerFrame:'#c8ccd0',washer:'#f2f2f0',washerRing:'#dfe2e5',washerPort:'#1d2327',shelf:'#cfae80',cshelf:'#f1efe9',cshelfBoard:'#6f4a30',mirrorFrame:'#2b2b2b',basin:'#b3262e',kwin2:'#f4f3ef',wallKFar:'#f6f5f1',wallKRight:'#f6f5f1',wallKDoor:'#f6f5f1',wallKStudio:'#f6f5f1',wallBShower:'#f6f5f1',wallBBack:'#f6f5f1',wallBBasin:'#f6f5f1',wallBDoor:'#f6f5f1',bathTaps:'#dfe2e5'};
 const COLOR_TARGETS={
   bedFrame:[()=>M.bedGrey,'bedFrameSw'],bedPanel:[()=>M.yellow,'bedPanelSw'],
   bedLinen:[()=>M.duvet,'bedLinenSw'],armWood:[()=>M.armWood,'armWoodSw'],
@@ -2849,7 +2855,7 @@ const COLOR_TARGETS={
   // murs, dans l'ordre de création : gauche, fond, droite, entrée
   wallLeft:[()=>walls[0].mat,'wallLeftSw'],wallBack:[()=>walls[1].mat,'wallBackSw'],
   wallRight:[()=>walls[2].mat,'wallRightSw'],wallFront:[()=>walls[3].mat,'wallFrontSw'],
-  kitchenFloor:[()=>M.kitchenFloor,'kitchenFloorSw'],fireFrame:[()=>M.fireFrame,'fireFrameSw'],art1:[()=>artMats[0],'art1Sw'],art2:[()=>artMats[1],'art2Sw'],art3:[()=>artMats[2],'art3Sw'],bathFloor:[()=>M.bathFloor,'bathFloorSw'],
+  kitchenFloor:[()=>M.kitchenFloor,'kitchenFloorSw'],fireFrame:[()=>M.fireFrame,'fireFrameSw'],bedBoxFront:[()=>M.bedBoxFront,'bedBoxFrontSw'],bedBoxLeft:[()=>M.bedBoxLeft,'bedBoxLeftSw'],bedBoxRight:[()=>M.bedBoxRight,'bedBoxRightSw'],art1:[()=>artMats[0],'art1Sw'],art2:[()=>artMats[1],'art2Sw'],art3:[()=>artMats[2],'art3Sw'],bathFloor:[()=>M.bathFloor,'bathFloorSw'],
   bathDoor:[()=>M.bathDoor,'bathDoorSw'],showerFrame:[()=>M.showerFrame,'showerFrameSw'],washer:[()=>M.washer,'washerSw'],washerRing:[()=>M.washerRing,'washerRingSw'],washerPort:[()=>M.washerPort,'washerPortSw'],shelf:[()=>M.shelf,'shelfSw'],cshelf:[()=>M.cshelf,'cshelfSw'],cshelfBoard:[()=>M.cshelfBoard,'cshelfBoardSw'],mirrorFrame:[()=>M.mirrorFrame,'mirrorFrameSw'],basin:[()=>M.basinRed,'basinSw'],kwin2:[()=>M.kWin2,'kwin2Sw'],bathTaps:[()=>M.chrome,'bathTapsSw'],
   wallKFar:[()=>wallMat(kitchenFarG),'wallKFarSw'],wallKRight:[()=>wallMat(kitchenRightG),'wallKRightSw'],
   wallKDoor:[()=>wallMat(bathWallG.z0),'wallKDoorSw'],wallKStudio:[()=>kitchenStudioPaint,'wallKStudioSw'],
@@ -2873,13 +2879,14 @@ function applyColor(k){
     const mm=mat();(Array.isArray(mm)?mm:[mm]).forEach(m=>m.color.set(colors[k]));
     if(k==='armWood')M.oakIn.color.set(shade(colors[k],0.25));
     if(k==='sofaFabric')M.sofaDark.color.set(shade(colors[k],-0.15));
+    if(k.startsWith('bedBox'))M[k].emissive.set(colors[k]).multiplyScalar(0.12);   // reste lumineux sans délaver la teinte
     if(k==='bathDoor'&&bathDoorStyle!=='paint')applyBathDoorStyle();
     if(k==='shelf'){
       const top=colors[k].toLowerCase()===WORKTOP_HEX;
       M.shelf.map=top?M.kTop.map:null;M.shelf.roughness=top?M.kTop.roughness:0.45;if(top)M.shelf.color.set('#ffffff');M.shelf.needsUpdate=true;
     }
   }
-  renderSwatches(sw,COLOR_PRESETS[k]||COLOR_PRESETS[k.startsWith('wall')?'wall':/^art\d$/.test(k)?'art1':k],colors[k],c=>{colors[k]=c;applyColor(k);save();});
+  renderSwatches(sw,COLOR_PRESETS[k]||COLOR_PRESETS[k.startsWith('wall')?'wall':/^art\d$/.test(k)?'art1':k.startsWith('bedBox')?'bedBox':k],colors[k],c=>{colors[k]=c;applyColor(k);save();});
   const room=Object.keys(WALL_ROOMS).find(r=>WALL_ROOMS[r].keys.includes(k));
   if(room)renderWallAll(room);
 }
