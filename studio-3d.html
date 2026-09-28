@@ -268,6 +268,12 @@ button.ghost{border-color:var(--line);color:var(--muted)}
       <p class="note" style="margin:0 0 8px">Glisse le miroir pour le déplacer le long des murs de la salle de bain.</p>
       <p class="swlabel">Cadre du miroir</p><div class="swatches" id="mirrorFrameSw"></div>
     </div>
+    <div class="sizes" id="acSizes">
+      <label>Bas à (cm du sol)<input id="acY" type="number" min="150" max="270" step="1" inputmode="numeric"></label>
+    </div>
+    <div id="acColors" class="colorset">
+      <p class="note" style="margin:0 0 8px">Glisse le climatiseur pour le déplacer le long des murs de la cuisine ; touche Suppr pour l’enlever.</p>
+    </div>
     <div class="sizes" id="cshelfSizes">
       <label>Longueur (cm)<input id="cshelfW" type="number" min="30" max="100" step="5" inputmode="numeric"></label>
       <label>Profondeur (cm)<input id="cshelfD" type="number" min="15" max="50" step="5" inputmode="numeric"></label>
@@ -284,7 +290,7 @@ button.ghost{border-color:var(--line);color:var(--muted)}
       <p class="swlabel">Couleur de la planche</p><div class="swatches" id="cshelfBoardSw"></div>
     </div>
     <div id="shelfColors" class="colorset">
-      <div class="actions" style="margin:0 0 10px"><button id="shelfFoldBtn">Rabattre / relever le rabat</button></div>
+      <div class="actions" style="margin:0 0 10px"><button id="shelfFoldBtn">Replier / déplier le rabat</button></div>
       <p class="swlabel">Couleur de la tablette</p><div class="swatches" id="shelfSw"></div>
     </div>
     <div class="sizes" id="kwin2Sizes">
@@ -553,7 +559,6 @@ const camera=new THREE.PerspectiveCamera(42,1,0.05,100);
 
 /* ---------- Déplacement des meubles (enregistré avant OrbitControls pour passer en premier) ---------- */
 const ray=new THREE.Raycaster(),ndc=new THREE.Vector2(),hitP=new THREE.Vector3();
-const floorPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
 let drag=null,down=null,selected=null,frozen=false;
 // Variateurs d'intensité (5 à 100 %) de chaque luminaire, et état des luminaires de la cuisine
 const dim={spots:100,bed:100,fan:100,kCeil:100,kUnder:100,bath:100};
@@ -600,8 +605,10 @@ canvas.addEventListener('pointerdown',e=>{
   if(!it)return;
   select(it);
   if(it.fixed){down.keepSel=true;return;}   // non déplaçable : reste sélectionné au relâchement, la vue peut tourner normalement
-  ray.ray.intersectPlane(floorPlane,hitP);
-  drag={it,dx:it.obj.position.x-hitP.x,dz:it.obj.position.z-hitP.z};
+  // plan horizontal à la hauteur du point saisi : un objet au-dessus des yeux (climatiseur) se déplace aussi
+  const h=ray.intersectObject(it.obj,true)[0],plane=new THREE.Plane(new THREE.Vector3(0,1,0),-(h?h.point.y:0));
+  if(!ray.ray.intersectPlane(plane,hitP)){plane.constant=0;ray.ray.intersectPlane(plane,hitP);}
+  drag={it,plane,dx:it.obj.position.x-hitP.x,dz:it.obj.position.z-hitP.z};
   controls.enabled=false;
   canvas.setPointerCapture(e.pointerId);
   e.stopImmediatePropagation();e.preventDefault();
@@ -610,7 +617,7 @@ canvas.addEventListener('pointermove',e=>{
   if(walk.on&&walk.look){walk.yaw-=(e.clientX-walk.look.x)*0.005;walk.pitch=Math.max(-1.2,Math.min(1.2,walk.pitch-(e.clientY-walk.look.y)*0.005));walk.look={x:e.clientX,y:e.clientY};return;}
   if(!drag)return;
   setRay(e);
-  if(!ray.ray.intersectPlane(floorPlane,hitP))return;
+  if(!ray.ray.intersectPlane(drag.plane,hitP))return;
   drag.it.obj.position.x=hitP.x+drag.dx;
   drag.it.obj.position.z=hitP.z+drag.dz;
   clampItem(drag.it);
@@ -1956,14 +1963,14 @@ const fan=new THREE.Group();
 const fanSize={d:1.07};
 let fanRotor=null,fanOn=false,fanSpeed=0,fanLight=null,fanLampOn=false;
 M.fanLamp=new THREE.MeshStandardMaterial({color:0xf7f3ea,roughness:0.3,transparent:true,opacity:0.92,emissive:0xffe2b4,emissiveIntensity:0});
-let BLADE_Y=H-0.36;   // suit le plafond de la pièce (faux plafond compris)
+let BLADE_Y=H-0.21;   // suit le plafond de la pièce (faux plafond compris)
 M.fanBody=new THREE.MeshStandardMaterial({color:0xf2f1ec,roughness:0.4});
 M.fanBlade=new THREE.MeshStandardMaterial({color:0xb8894f,roughness:0.6});
 function buildFan(){
   while(fan.children.length){const c=fan.children.pop();c.traverse(m=>m.geometry&&m.geometry.dispose());}
-  const R=fanSize.d/2,top=ceilY('studio');BLADE_Y=top-0.36;
+  const R=fanSize.d/2,top=ceilY('studio');BLADE_Y=top-0.21;
   cyl(fan,M.fanBody,0,top-0.05,top,0,0.075);
-  cyl(fan,M.metal,0,top-0.30,top-0.05,0,0.012);
+  cyl(fan,M.metal,0,top-0.15,top-0.05,0,0.012);   // tige courte (10 cm)
   fanRotor=new THREE.Group();fanRotor.position.set(0,BLADE_Y,0);fan.add(fanRotor);
   cyl(fanRotor,M.fanBody,0,-0.06,0.06,0,0.10);
   // lampe sous le moteur (fixe, ne tourne pas avec les pales)
@@ -2023,6 +2030,7 @@ function buildFaux(){
   }
   spotsG.position.y=ceilY('studio')-H;
   kCeilG.position.y=ceilY('kitchen')-H;
+  buildAC();acInfo();   // le climatiseur reste sous le plafond de la cuisine
   bathCeilG.position.y=ceilY('bath')-H;
   if(fauxTop!==ceilY('studio')){   // le ventilateur reste accroché au plafond
     fauxTop=ceilY('studio');buildFan();fan.traverse(m=>{if(m.isMesh){m.castShadow=true;m.receiveShadow=true;}});
@@ -2257,30 +2265,30 @@ washerItem.niche={x0:KX1-NICHED,z0:NICHEZ0,z1:NICHEZ1,h:NICHEH};   // peut entre
 M.shelf=new THREE.MeshStandardMaterial({color:0xcfae80,roughness:0.45});
 const shelfSize={w:0.65,d:0.60,y:0.86,f:0.30};   // y : dessous de la tablette (m) ; f : longueur du rabat côté pièce (0 = pas de rabat)
 const shelfG=new THREE.Group();
-// rabat : partie avant articulée qui se rabat vers le bas (clic dessus ou bouton « Rabattre »), comme la table murale
+// rabat : rallonge avant articulée qui se replie à plat sur la tablette (clic dessus ou bouton « Replier »)
 const shelfFlap=new THREE.Group();
-const shelfFlapLen=()=>Math.max(0,Math.min(shelfSize.f,0.70,shelfSize.y-0.10));   // rabattu, il reste à 10 cm du sol au moins
+const shelfFlapLen=()=>Math.max(0,Math.min(shelfSize.f,0.70,shelfSize.d));   // replié, il tient sur la partie fixe
 function buildShelf(){
   while(shelfG.children.length){const c=shelfG.children.pop();if(c!==shelfFlap)c.geometry&&c.geometry.dispose();}
   while(shelfFlap.children.length){const c=shelfFlap.children.pop();c.geometry&&c.geometry.dispose();}
   // repère local : longueur en x, profondeur en z (mur en −z, pièce en +z) ; 2,5 cm d'épaisseur, par défaut juste au-dessus du lave-linge (85 cm)
-  // rabat : rallonge articulée sous l'arête avant (comme la table murale) ; rabattu, il pend devant le lave-linge
+  // rabat : rallonge articulée sur l'arête avant du dessus ; replié, il se couche à plat sur la tablette
   const w=shelfSize.w/2,z0=-shelfSize.d/2,z1=shelfSize.d/2,f=shelfFlapLen(),y0=shelfSize.y,y1=y0+0.025;
   box(shelfG,M.shelf,-w,w,y0,y1,z0,z1);   // partie fixe
   if(f>0){
-    shelfFlap.position.set(0,y0,z1+0.002);   // charnière sous l'arête avant
-    box(shelfFlap,M.shelf,-w,w,0,0.025,0,f);
-    box(shelfFlap,M.metal,-w+0.04,-w+0.10,-0.002,0,-0.03,0.03,false);box(shelfFlap,M.metal,w-0.10,w-0.04,-0.002,0,-0.03,0.03,false);   // charnières
+    shelfFlap.position.set(0,y1,z1+0.001);   // charnière sur l'arête avant du dessus
+    box(shelfFlap,M.shelf,-w,w,-0.025,0,0.001,f);
+    box(shelfFlap,M.metal,-w+0.02,w-0.02,0,0.002,-0.012,0.012,false);   // charnière piano
     shelfG.add(shelfFlap);
   }
 }
 buildShelf();
-// rabattu : le rabat pend vers le bas (rotation autour de la charnière)
-markOpenable(openable('shelfFlap',e=>{shelfFlap.rotation.x=Math.PI/2*e;},()=>shelfFlapLen()>0?[shelfFlap]:[]),shelfFlap);
+// replié : le rabat bascule par-dessus et se couche sur la tablette (demi-tour autour de la charnière)
+markOpenable(openable('shelfFlap',e=>{shelfFlap.rotation.x=-Math.PI*e;},()=>shelfFlapLen()>0?[shelfFlap]:[]),shelfFlap);
 const shelfItem=addItem('shelf','Tablette au-dessus du lave-linge',shelfG,shelfSize.w,shelfSize.d,{x:KX1-NICHED+shelfSize.d/2,z:(NICHEZ0+NICHEZ1)/2,r:Math.PI/2},'');
 shelfItem.bounds={x0:KX1,x1:KX0,z0:KZ0,z1:KZ1};
 shelfItem.niche={x0:KX1-NICHED,z0:NICHEZ0,z1:NICHEZ1,h:NICHEH};
-function shelfInfo(){shelfItem.info=Math.round(shelfSize.w*100)+' × '+Math.round(shelfSize.d*100)+' cm, dessus à '+Math.round((shelfSize.y+0.025)*100)+' cm du sol'+(shelfFlapLen()>0?', rabat de '+Math.round(shelfFlapLen()*100)+' cm (clique dessus pour le rabattre ou le relever)':'');}
+function shelfInfo(){shelfItem.info=Math.round(shelfSize.w*100)+' × '+Math.round(shelfSize.d*100)+' cm, dessus à '+Math.round((shelfSize.y+0.025)*100)+' cm du sol'+(shelfFlapLen()>0?', rabat de '+Math.round(shelfFlapLen()*100)+' cm (clique dessus pour le replier sur la tablette ou le déplier)':'');}
 shelfInfo();
 /* Étagère ouverte d'angle : étagères rectangulaires, adossées au mur du fond de l'angle, tenues à gauche par un
    panneau contre l'autre mur et fixées au mur ; côté droit libre, sans montant. Dans l'angle de la cuisine devant
@@ -2474,6 +2482,59 @@ mirrorInfo();
   };
   [iw,ih,iy].forEach(i=>i.addEventListener('change',upd));
   syncMirrorInputs();
+}
+/* Climatiseur mural (split) : 77 × 28,8 × 22,5 cm, au-dessus de la fenêtre de la cuisine ; il glisse le long des
+   murs de la cuisine, hauteur du bas réglable (il reste sous le plafond ou le faux plafond). */
+M.acBody=new THREE.MeshStandardMaterial({color:0xf5f5f3,roughness:0.35});
+M.acGrey=new THREE.MeshStandardMaterial({color:0xd9dad8,roughness:0.4});
+M.acVent=new THREE.MeshStandardMaterial({color:0x4a4d50,roughness:0.6});
+M.acLed=new THREE.MeshStandardMaterial({color:0x9fd4ff,emissive:0x3b8fd6,emissiveIntensity:0.8});
+const ac={y:WINY1+0.10};
+const AC_W=0.77,AC_H=0.288,AC_D=0.225;
+const acG=new THREE.Group();
+const acBottom=()=>Math.max(1.5,Math.min(ac.y,ceilY('kitchen')-AC_H-0.02));
+function buildAC(){
+  while(acG.children.length){const c=acG.children.pop();c.geometry.dispose();}
+  // repère local : mur en x=0, l'appareil avance vers −x ; longueur le long de z
+  const w=AC_W/2,y0=acBottom(),y1=y0+AC_H,d=AC_D;
+  box(acG,M.acBody,-d+0.02,0,y0+0.02,y1,-w,w);                           // caisson
+  box(acG,M.acBody,-d,-d+0.02,y0+0.07,y1-0.01,-w+0.005,w-0.005);           // façade
+  box(acG,M.acGrey,-d-0.001,-d+0.02,y0+0.066,y0+0.07,-w+0.005,w-0.005,false);   // joint de façade
+  box(acG,M.acVent,-d+0.02,-0.03,y0,y0+0.02,-w+0.03,w-0.03,false);         // sortie d'air, dessous
+  box(acG,M.acGrey,-d,-d+0.06,y0+0.02,y0+0.066,-w+0.02,w-0.02);            // volet orientable
+  box(acG,M.acLed,-d-0.002,-d,y0+0.085,y0+0.093,w-0.09,w-0.05,false);      // voyant
+}
+buildAC();
+const AC_WALLS=[   // [axe, position du mur, début, fin, rotation]
+  ['x',KX1,KZ0,KZ1,Math.PI],        // mur de la fenêtre
+  ['x',KX0,KZ0,KZ1,0],              // mur côté pièce principale
+  ['z',KZ0,KX1,KX0,Math.PI/2],
+  ['z',KZ1,KX1,KX0,-Math.PI/2],
+];
+const acItem=addItem('ac','Climatiseur',acG,AC_D,AC_W,{x:KX1,z:(WINZ0+WINZ1)/2,r:Math.PI},'');
+acItem.noRotate=true;
+acItem.snapFn=it=>{
+  const p=it.obj.position,hw=AC_W/2;let best=null;
+  AC_WALLS.forEach(([ax,pos,a0,a1,r])=>{
+    const along=ax==='x'?p.z:p.x,dist=Math.abs((ax==='x'?p.x:p.z)-pos);
+    const a=Math.min(a1-hw,Math.max(a0+hw,along)),d=dist+Math.abs(a-along);
+    if(!best||d<best.d)best={d,ax,pos,a,r};
+  });
+  if(best.ax==='x')p.set(best.pos,0,best.a);else p.set(best.a,0,best.pos);
+  it.obj.rotation.y=best.r;
+};
+function acInfo(){acItem.info='77 × 28,8 cm, 22,5 cm de profondeur, bas à '+Math.round(acBottom()*100)+' cm du sol ; glisse-le le long des murs de la cuisine';}
+acInfo();
+{
+  const iy=document.getElementById('acY');
+  window.syncAcInputs=()=>{iy.value=Math.round(ac.y*100);};
+  iy.addEventListener('change',()=>{
+    const y=parseFloat(iy.value);if(!isNaN(y))ac.y=Math.min(2.70,Math.max(1.50,y/100));
+    buildAC();acInfo();syncAcInputs();
+    if(selected===acItem){selBox.setFromObject(acG);showSel(acItem);}
+    save();
+  });
+  syncAcInputs();
 }
 const wcItem=addItem('wc','WC suspendu',wcG,0.36,0.49,{x:(SBX0+SBX1-SHW)/2-0.02,z:SBZ1-0.245,r:0},'36 × 49 cm depuis le mur, blanc, avec plaque de commande');
 wcItem.bounds=BATH_FREE;
@@ -2713,7 +2774,7 @@ const selBox=new THREE.BoxHelper(undefined,0x2f8f93);selBox.visible=false;scene.
 const selEl=document.getElementById('sel'),rotBtn=document.getElementById('rotBtn'),rot15Btn=document.getElementById('rot15Btn');
 const delBtn=document.getElementById('delBtn'),restoreBtn=document.getElementById('restoreBtn'),freezeBtn=document.getElementById('freezeBtn');
 // Supprimables : le décor du jardin, la grande plante et les chaises (les meubles se masquent avec « Afficher »).
-const isRemovable=it=>!!it.deco||it.id==='plant'||it.id==='cshelf'||it.id==='mirror'||it.id.startsWith('chair');
+const isRemovable=it=>!!it.deco||it.id==='plant'||it.id==='cshelf'||it.id==='mirror'||it.id==='ac'||it.id.startsWith('chair');
 function removeSelected(){
   if(!selected||!isRemovable(selected))return;
   const name=selected.name;removed.add(selected.id);select(null);applyShow();save();
@@ -2754,7 +2815,7 @@ function select(it){
   if(it&&it!==was)panelEl.scrollTo({top:0,behavior:reduceMotion?'auto':'smooth'});
   selBox.visible=!!it;
   if(it){selBox.setFromObject(it.obj);showSel(it);}
-  else{selEl.textContent=frozen?'Éléments figés : plus rien n\u2019est sélectionnable. Clique sur « Défiger les éléments » pour les modifier.':'Clique sur un meuble pour le sélectionner.';document.getElementById('sofaSizes').classList.remove('on');document.getElementById('wardSizes').classList.remove('on');document.getElementById('wardColors').classList.remove('on');document.getElementById('bedColors').classList.remove('on');document.getElementById('armColors').classList.remove('on');['tableColors','chairColors','fanSizes','sofaColors','bathDoorColors','showerColors','washerColors','tapColors','shelfSizes','shelfColors','basinColors','wcSet','cshelfSizes','cshelfColors','mirrorSizes','mirrorColors','kwin2Sizes','kwin2Colors'].forEach(i=>document.getElementById(i).classList.remove('on'));document.getElementById('tableSizes').classList.remove('on');document.getElementById('tableNote').hidden=true;}
+  else{selEl.textContent=frozen?'Éléments figés : plus rien n\u2019est sélectionnable. Clique sur « Défiger les éléments » pour les modifier.':'Clique sur un meuble pour le sélectionner.';document.getElementById('sofaSizes').classList.remove('on');document.getElementById('wardSizes').classList.remove('on');document.getElementById('wardColors').classList.remove('on');document.getElementById('bedColors').classList.remove('on');document.getElementById('armColors').classList.remove('on');['tableColors','chairColors','fanSizes','sofaColors','bathDoorColors','showerColors','washerColors','tapColors','shelfSizes','shelfColors','basinColors','wcSet','cshelfSizes','cshelfColors','mirrorSizes','mirrorColors','acSizes','acColors','kwin2Sizes','kwin2Colors'].forEach(i=>document.getElementById(i).classList.remove('on'));document.getElementById('tableSizes').classList.remove('on');document.getElementById('tableNote').hidden=true;}
   rotBtn.disabled=rot15Btn.disabled=!it||!!it.wallSnap||!!it.fixed||!!it.noRotate;
   delBtn.disabled=!it||!isRemovable(it);
 }
@@ -2781,6 +2842,8 @@ function showSel(it){
   document.getElementById('cshelfSizes').classList.toggle('on',it.id==='cshelf');
   document.getElementById('mirrorSizes').classList.toggle('on',it.id==='mirror');
   document.getElementById('mirrorColors').classList.toggle('on',it.id==='mirror');
+  document.getElementById('acSizes').classList.toggle('on',it.id==='ac');
+  document.getElementById('acColors').classList.toggle('on',it.id==='ac');
   document.getElementById('cshelfColors').classList.toggle('on',it.id==='cshelf');
   document.getElementById('tapColors').classList.toggle('on',it.id==='shower'||it.id==='basin'||it.id==='showercol');
   if(it!==tableItem)document.getElementById('tableNote').hidden=true;
@@ -2857,7 +2920,7 @@ function groupItems(k){
   if(k==='fan')return[fanItem];
   if(k==='garden'||k==='mountains')return[];
   if(k==='shelf')return[shelfItem];
-  if(k==='kitchen')return[kitchenItem,wcItem,basinItem,washerItem,showerColItem,cshelfItem,mirrorItem];
+  if(k==='kitchen')return[kitchenItem,wcItem,basinItem,washerItem,showerColItem,cshelfItem,mirrorItem,acItem];
   if(k==='plant')return[plantItem];
   return items.filter(i=>i.id.startsWith('chair'));
 }
@@ -2891,7 +2954,7 @@ document.querySelectorAll('[data-show]').forEach(b=>b.addEventListener('click',(
 function getState(){
   const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),cshelf:Object.assign({},cshelf),mirror:Object.assign({},mirror),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),bathFloorTiles:Object.assign({},bathFloorTiles),tileTone,dayLevel,bathDoorStyle,sitter:sitterOn,dimsOn,wcCorner,walkRecul:walk.recul,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
   items.forEach(it=>o.items[it.id]={x:it.obj.position.x,z:it.obj.position.z,r:it.obj.rotation.y});
-  o.fauxCeil=fauxCeil;
+  o.fauxCeil=fauxCeil;o.ac={y:ac.y};
   return JSON.parse(JSON.stringify(o));
 }
 // Sauvegarde automatique : chaque changement (déplacement, taille, couleur, état, vue) est gardé aussitôt.
@@ -2937,6 +3000,7 @@ function loadInto(s){
   if(s&&s.show)Object.assign(showState,s.show);
   if(s&&Array.isArray(s.removed)){removed.clear();s.removed.forEach(id=>removed.add(id));}
   if(s&&typeof s.frozen==='boolean')frozen=s.frozen;
+  if(s&&s.ac&&typeof s.ac.y==='number'){ac.y=Math.min(2.70,Math.max(1.50,s.ac.y));buildAC();acInfo();syncAcInputs();}
   if(s&&s.fauxCeil){
     ['studio','kitchen','bath'].forEach(k=>{const f=s.fauxCeil[k];if(f){fauxCeil[k].on=!!f.on;if(typeof f.h==='number')setFauxH(k,f.h*100);}});
     fauxCeil.bedBox=!!s.fauxCeil.bedBox;
@@ -2970,7 +3034,7 @@ function loadInto(s){
   if(s&&s.items){
     items.forEach(it=>{const p=s.items[it.id];if(p){it.obj.position.set(p.x,0,p.z);it.obj.rotation.y=p.r;}});
     items.forEach(it=>{if(it.wallSnap)snapWall(it);});
-    [kitchenItem,wcItem,basinItem,washerItem,shelfItem,showerColItem,cshelfItem,mirrorItem].forEach(clampItem);   // la cuisine et la salle de bain ont pu changer depuis l'enregistrement
+    [kitchenItem,wcItem,basinItem,washerItem,shelfItem,showerColItem,cshelfItem,mirrorItem,acItem].forEach(clampItem);   // la cuisine et la salle de bain ont pu changer depuis l'enregistrement
     if(s.tableOpen===0){tableTarget=0;tableT=0;}
     if(s.sofaBack===1){sofaBackTarget=1;sofaBackT=1;sofaBack.rotation.x=-Math.PI/2;clampItem(sofaItem);}
   }
@@ -3564,6 +3628,7 @@ document.getElementById('resetBtn').addEventListener('click',()=>{
   Object.assign(showState,{bed:true,sofa:true,table:true,chairs:true,wardrobe:true,fan:true,plant:true,garden:true,mountains:true,kitchen:true,shelf:true});applyShow();
   sofaBackTarget=0;sofaBackT=0;syncSofaBackBtn();sofaBack.rotation.x=0;
   shelfSize.w=0.65;shelfSize.d=0.60;shelfSize.y=0.86;shelfSize.f=0.30;shelfItem.w=shelfSize.w;shelfItem.d=shelfSize.d;buildShelf();shelfInfo();syncShelfInputs();
+  ac.y=WINY1+0.10;buildAC();acInfo();syncAcInputs();
   Object.assign(mirror,{w:0.45,h:0.60,y:1.10});mirrorItem.d=mirror.w;buildMirror();mirrorInfo();syncMirrorInputs();
   Object.assign(cshelf,{w:0.50,d:0.30,h:1.80,n:5,back:true,side:false});cshelfItem.w=cshelf.w;cshelfItem.d=cshelf.d;buildCShelf();cshelfInfo();syncCShelfInputs();
   kWin2.w=0.45;kWin2.h=0.35;kWin2.y=1.60;buildKitchenRight();syncKWin2Inputs();
