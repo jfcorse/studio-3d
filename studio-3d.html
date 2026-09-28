@@ -269,6 +269,24 @@ button.ghost{border-color:var(--line);color:var(--muted)}
       <p class="note" style="margin:0 0 8px">Glisse le miroir pour le déplacer le long des murs de la salle de bain.</p>
       <p class="swlabel">Cadre du miroir</p><div class="swatches" id="mirrorFrameSw"></div>
     </div>
+    <div class="sizes" id="fireSizes">
+      <label>Largeur (cm)<input id="fireW" type="number" min="50" max="180" step="5" inputmode="numeric"></label>
+      <label>Hauteur (cm)<input id="fireH" type="number" min="30" max="100" step="5" inputmode="numeric"></label>
+      <label>Bas à (cm du sol)<input id="fireY" type="number" min="0" max="150" step="5" inputmode="numeric"></label>
+    </div>
+    <div id="fireColors" class="colorset">
+      <div class="actions" style="margin:0 0 10px"><button id="fireBtn" aria-pressed="true">Éteindre le feu</button></div>
+      <p class="swlabel">Cadre de la cheminée</p><div class="swatches" id="fireFrameSw"></div>
+      <p class="note" style="margin:8px 0 0">Glisse la cheminée le long des murs de la pièce principale.</p>
+    </div>
+    <div class="sizes" id="artSizes">
+      <label>Largeur (cm)<input id="artW" type="number" min="20" max="200" step="5" inputmode="numeric"></label>
+      <label>Hauteur (cm)<input id="artH" type="number" min="20" max="200" step="5" inputmode="numeric"></label>
+      <label>Bas à (cm du sol)<input id="artY" type="number" min="30" max="250" step="5" inputmode="numeric"></label>
+    </div>
+    <div id="art1Colors" class="colorset"><p class="swlabel">Couleur dominante du tableau</p><div class="swatches" id="art1Sw"></div></div>
+    <div id="art2Colors" class="colorset"><p class="swlabel">Couleur dominante du tableau</p><div class="swatches" id="art2Sw"></div></div>
+    <div id="art3Colors" class="colorset"><p class="swlabel">Couleur dominante du tableau</p><div class="swatches" id="art3Sw"></div></div>
     <div class="sizes" id="acSizes">
       <label>Bas à (cm du sol)<input id="acY" type="number" min="150" max="270" step="1" inputmode="numeric"></label>
     </div>
@@ -486,6 +504,8 @@ button.ghost{border-color:var(--line);color:var(--muted)}
       <button data-show="mountains" aria-pressed="true">Montagnes</button>
       <button data-show="kitchen" aria-pressed="true">Cuisine voisine</button>
       <button data-show="shelf" aria-pressed="true">Tablette lave-linge</button>
+      <button data-show="fire" aria-pressed="true">Cheminée</button>
+      <button data-show="art" aria-pressed="true">Tableaux</button>
     </div>
   </details>
 
@@ -2594,6 +2614,145 @@ acInfo();
   });
   syncAcInputs();
 }
+/* ---------- Pièce principale : cheminée électrique encastrée et trois tableaux ----------
+   Objets muraux : ils glissent le long des murs de la pièce et se collent au mur le plus proche.
+   Repère local commun : mur en x = 0, l'objet avance vers −x, largeur le long de z. */
+const STUDIO_WALLS=[   // [axe, position du mur, début, fin, rotation]
+  ['x',0,0,D,Math.PI],['x',W,0,D,0],['z',0,0,W,Math.PI/2],['z',D,0,W,-Math.PI/2],
+];
+function studioWallSnap(half){
+  return it=>{
+    const p=it.obj.position,hw=half();let best=null;
+    STUDIO_WALLS.forEach(([ax,pos,a0,a1,r])=>{
+      if(a1-a0<2*hw)return;
+      const along=ax==='x'?p.z:p.x,dist=Math.abs((ax==='x'?p.x:p.z)-pos);
+      const a=Math.min(a1-hw,Math.max(a0+hw,along)),d=dist+Math.abs(a-along);
+      if(!best||d<best.d)best={d,ax,pos,a,r};
+    });
+    if(!best)return;
+    if(best.ax==='x')p.set(best.pos,0,best.a);else p.set(best.a,0,best.pos);
+    it.obj.rotation.y=best.r;
+  };
+}
+// Cheminée électrique : insert affleurant (cadre, vitre sombre, flammes animées sur un lit de braises)
+M.fireFrame=new THREE.MeshStandardMaterial({color:0x1f2124,roughness:0.35,metalness:0.3});
+M.fireBack=new THREE.MeshStandardMaterial({color:0x0b0b0c,roughness:0.9});
+M.fireGlass=new THREE.MeshStandardMaterial({color:0x111214,roughness:0.05,metalness:0.2,transparent:true,opacity:0.35,depthWrite:false});
+const flameTex=(()=>{
+  const c=document.createElement('canvas');c.width=512;c.height=128;const g=c.getContext('2d'),r=rng(71);
+  g.globalCompositeOperation='lighter';
+  for(let i=0;i<46;i++){
+    const x=r()*512,w=14+r()*30,h=40+r()*80;
+    const gr=g.createLinearGradient(0,128,0,128-h);
+    gr.addColorStop(0,'rgba(255,140,30,0.9)');gr.addColorStop(0.45,'rgba(255,90,10,0.55)');gr.addColorStop(1,'rgba(255,200,80,0)');
+    g.fillStyle=gr;g.beginPath();g.moveTo(x-w/2,128);g.quadraticCurveTo(x-w*0.4,128-h*0.5,x+(r()-0.5)*w*0.6,128-h);g.quadraticCurveTo(x+w*0.4,128-h*0.5,x+w/2,128);g.fill();
+  }
+  const t=new THREE.CanvasTexture(c);t.wrapS=THREE.RepeatWrapping;t.encoding=THREE.sRGBEncoding;return t;
+})();
+M.flame=new THREE.MeshBasicMaterial({map:flameTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+M.embers=new THREE.MeshBasicMaterial({color:0xff5a1a});
+const fire={w:0.90,h:0.50,y:0.35};
+let fireOn=true,fireLight=null,flameMeshes=[];
+const fireG=new THREE.Group();
+function buildFire(){
+  while(fireG.children.length){const c=fireG.children.pop();c.geometry&&c.geometry.dispose();}
+  const w=fire.w/2,y0=fire.y,y1=fire.y+fire.h,f=0.035;
+  box(fireG,M.fireFrame,-0.025,0,y0,y1,-w,w,false);                            // cadre
+  box(fireG,M.fireBack,-0.026,-0.024,y0+f,y1-f,-w+f,w-f,false);                // fond noir (foyer)
+  box(fireG,M.embers,-0.034,-0.026,y0+f,y0+f+0.025,-w+f+0.02,w-f-0.02,false);  // lit de braises
+  flameMeshes=[0,1].map(i=>{
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(fire.w-2*f-0.04,(fire.h-2*f)*0.62),M.flame.clone());
+    m.material.map=flameTex.clone();m.material.map.needsUpdate=true;m.material.map.repeat.set(i?0.8:1,1);
+    m.rotation.y=-Math.PI/2;m.position.set(-0.036-i*0.003,y0+f+0.02+(fire.h-2*f)*0.31,0);fireG.add(m);return m;
+  });
+  const glass=new THREE.Mesh(new THREE.PlaneGeometry(fire.w-2*f,fire.h-2*f),M.fireGlass);
+  glass.rotation.y=-Math.PI/2;glass.position.set(-0.042,(y0+y1)/2,0);fireG.add(glass);
+  box(fireG,M.fireFrame,-0.045,-0.025,y0,y0+f,-w,w,false);box(fireG,M.fireFrame,-0.045,-0.025,y1-f,y1,-w,w,false);   // cadre avant
+  box(fireG,M.fireFrame,-0.045,-0.025,y0+f,y1-f,-w,-w+f,false);box(fireG,M.fireFrame,-0.045,-0.025,y0+f,y1-f,w-f,w,false);
+  fireLight=new THREE.PointLight(0xff8a3a,0,3.5,2);fireLight.position.set(-0.35,y0+fire.h*0.4,0);fireG.add(fireLight);
+  applyFire();
+}
+function applyFire(){
+  flameMeshes.forEach(m=>m.visible=fireOn);M.embers.color.set(fireOn?0xff5a1a:0x2a2220);
+  if(fireLight)fireLight.intensity=fireOn?0.9:0;
+  const b=document.getElementById('fireBtn');if(b){b.textContent=fireOn?'Éteindre le feu':'Allumer le feu';b.setAttribute('aria-pressed',String(fireOn));}
+}
+function animateFire(t){   // flammes qui ondulent et lumière qui vacille
+  if(!fireOn||!fireG.visible)return;
+  flameMeshes.forEach((m,i)=>{m.material.map.offset.x=(t*(0.05+i*0.03))%1;m.scale.y=0.9+0.12*Math.sin(t*(7+i*3))*Math.sin(t*(2.3+i));});
+  if(fireLight)fireLight.intensity=0.8+0.25*Math.sin(t*9)*Math.sin(t*3.7);
+}
+buildFire();
+const fireItem=addItem('fire','Cheminée électrique',fireG,0.045,fire.w,{x:W,z:1.45,r:0},'');
+fireItem.noRotate=true;fireItem.snapFn=studioWallSnap(()=>fire.w/2);
+function fireInfo(){fireItem.d=fire.w;fireItem.info='cheminée électrique encastrée '+Math.round(fire.w*100)+' × '+Math.round(fire.h*100)+' cm, bas à '+Math.round(fire.y*100)+' cm du sol ; glisse-la le long des murs';}
+fireInfo();
+{
+  const iw=document.getElementById('fireW'),ih=document.getElementById('fireH'),iy=document.getElementById('fireY');
+  window.syncFireInputs=()=>{iw.value=Math.round(fire.w*100);ih.value=Math.round(fire.h*100);iy.value=Math.round(fire.y*100);};
+  const upd=()=>{
+    const w=parseFloat(iw.value),h=parseFloat(ih.value),y=parseFloat(iy.value);
+    if(!isNaN(w))fire.w=Math.min(1.8,Math.max(0.5,w/100));if(!isNaN(h))fire.h=Math.min(1.0,Math.max(0.3,h/100));
+    if(!isNaN(y))fire.y=Math.min(H-0.1-fire.h,Math.max(0,y/100));
+    buildFire();fireInfo();clampItem(fireItem);syncFireInputs();
+    if(selected===fireItem){selBox.setFromObject(fireG);showSel(fireItem);}
+    save();
+  };
+  [iw,ih,iy].forEach(i=>i.addEventListener('change',upd));
+  document.getElementById('fireBtn').addEventListener('click',()=>{fireOn=!fireOn;applyFire();save();});
+  syncFireInputs();
+}
+// Tableaux : toile abstraite générée à partir d'une couleur dominante (trois compositions différentes), cadre fin noir
+M.artFrame=new THREE.MeshStandardMaterial({color:0x1d1d1f,roughness:0.5});
+const arts=[{w:0.60,h:0.80,y:1.15},{w:0.70,h:0.50,y:1.45},{w:0.50,h:0.70,y:1.25}];
+function artTex(base,style,w,h){
+  const cw=256,ch=Math.max(64,Math.min(768,Math.round(256*h/w))),c=document.createElement('canvas');c.width=cw;c.height=ch;
+  const g=c.getContext('2d'),r=rng(101+style*17),inv='#'+(0xffffff^parseInt(base.slice(1),16)).toString(16).padStart(6,'0');
+  const pal=[base,shade(base,-0.35),shade(base,0.35),inv,shade(inv,0.4),'#f3efe6','#1f1f22'];
+  if(style===0){   // grands aplats superposés
+    g.fillStyle=shade(base,0.55);g.fillRect(0,0,cw,ch);
+    [[0.08,0.06,0.84,0.46,pal[0]],[0.08,0.56,0.84,0.34,pal[1]],[0.2,0.2,0.3,0.18,pal[3]]].forEach(([x,y,ww,hh,col])=>{g.globalAlpha=0.9;g.fillStyle=col;g.fillRect(x*cw,y*ch,ww*cw,hh*ch);});
+  }else if(style===1){   // cercles
+    g.fillStyle=shade(base,0.6);g.fillRect(0,0,cw,ch);
+    for(let i=0;i<9;i++){g.globalAlpha=0.55+r()*0.4;g.fillStyle=pal[i%5];g.beginPath();g.arc(r()*cw,r()*ch,12+r()*Math.min(cw,ch)*0.35,0,6.3);g.fill();}
+  }else{   // traits diagonaux
+    g.fillStyle=shade(base,-0.55);g.fillRect(0,0,cw,ch);
+    for(let i=0;i<26;i++){g.globalAlpha=0.5+r()*0.5;g.strokeStyle=pal[[0,2,3,5,0,2][i%6]];g.lineWidth=3+r()*14;g.beginPath();const x=r()*cw,y=r()*ch,l=40+r()*160,a=-0.9+r()*0.4;g.moveTo(x,y);g.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l);g.stroke();}
+  }
+  g.globalAlpha=1;
+  const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;return t;
+}
+const artGs=[],artItems=[],artMats=[];
+function buildArt(i){
+  const g=artGs[i],a=arts[i];
+  while(g.children.length){const c=g.children.pop();c.geometry&&c.geometry.dispose();}
+  const w=a.w/2,y0=a.y,y1=a.y+a.h,f=0.025;
+  box(g,M.artFrame,-0.03,0,y0,y1,-w,w,false);
+  const old=artMats[i].map;artMats[i].map=artTex(colors['art'+(i+1)]||'#c4553a',i,a.w,a.h);artMats[i].needsUpdate=true;if(old)old.dispose();
+  const cv=new THREE.Mesh(new THREE.PlaneGeometry(a.w-2*f,a.h-2*f),artMats[i]);cv.rotation.y=-Math.PI/2;cv.position.set(-0.031,(y0+y1)/2,0);g.add(cv);
+  artInfo(i);
+}
+const ART_DEF=[{x:0.85,z:0,r:Math.PI/2},{x:W,z:1.45,r:0},{x:W,z:3.35,r:0}];
+arts.forEach((a,i)=>{
+  artGs[i]=new THREE.Group();artMats[i]=new THREE.MeshStandardMaterial({roughness:0.8});
+  const it=addItem('art'+(i+1),'Tableau '+(i+1),artGs[i],0.03,a.w,ART_DEF[i],'');
+  it.noRotate=true;it.snapFn=studioWallSnap(()=>arts[i].w/2);artItems.push(it);
+});
+function artInfo(i){const a=arts[i],it=artItems[i];it.d=a.w;it.info='tableau '+Math.round(a.w*100)+' × '+Math.round(a.h*100)+' cm, bas à '+Math.round(a.y*100)+' cm du sol ; glisse-le le long des murs';}
+{
+  const iw=document.getElementById('artW'),ih=document.getElementById('artH'),iy=document.getElementById('artY');
+  const cur=()=>artItems.indexOf(selected);
+  window.syncArtInputs=()=>{const i=cur();if(i<0)return;const a=arts[i];iw.value=Math.round(a.w*100);ih.value=Math.round(a.h*100);iy.value=Math.round(a.y*100);};
+  const upd=()=>{
+    const i=cur();if(i<0)return;const a=arts[i];
+    const w=parseFloat(iw.value),h=parseFloat(ih.value),y=parseFloat(iy.value);
+    if(!isNaN(w))a.w=Math.min(2,Math.max(0.2,w/100));if(!isNaN(h))a.h=Math.min(2,Math.max(0.2,h/100));
+    if(!isNaN(y))a.y=Math.min(H-0.05-a.h,Math.max(0.3,y/100));
+    buildArt(i);artInfo(i);clampItem(artItems[i]);syncArtInputs();
+    selBox.setFromObject(artGs[i]);showSel(artItems[i]);save();
+  };
+  [iw,ih,iy].forEach(el=>el.addEventListener('change',upd));
+}
 const wcItem=addItem('wc','WC suspendu',wcG,0.36,0.49,{x:(SBX0+SBX1-SHW)/2-0.02,z:SBZ1-0.245,r:0},'36 × 49 cm depuis le mur, blanc, avec plaque de commande');
 wcItem.bounds=BATH_FREE;
 /* WC en angle : bâti d'angle triangulaire (côtés de 45 cm le long des murs), WC à 45°, dos contre le bâti.
@@ -2671,6 +2830,8 @@ const COLOR_PRESETS={
   mirrorFrame:[['Noir','#2b2b2b'],['Blanc','#f1efe9'],['Chromé','#dfe2e5'],['Doré','#c9a44c'],['Chêne clair','#cfae80'],['Noyer','#6f4a30']],
   cshelfBoard:[['Noyer','#6f4a30'],['Chêne clair','#cfae80'],['Chêne naturel','#b8894f'],['Blanc','#f1efe9'],['Gris béton','#9a9a95'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Vert sauge','#a7b39a']],
   cshelf:[['Blanc','#f1efe9'],['Chêne clair','#cfae80'],['Chêne naturel','#b8894f'],['Noyer','#6f4a30'],['Gris béton','#9a9a95'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Vert sauge','#a7b39a']],
+  fireFrame:[['Noir','#1f2124'],['Anthracite','#4a4f55'],['Gris acier','#8d9399'],['Blanc','#f1efe9'],['Chêne clair','#cfae80'],['Noyer','#6f4a30']],
+  art1:[['Terre cuite','#c4553a'],['Bleu canard','#2f6f8f'],['Ocre','#d9a93a'],['Vert sauge','#7f9a72'],['Rose poudré','#d8a3a0'],['Bleu nuit','#27335a'],['Gris','#8c8c8c'],['Bordeaux','#7a2331']],
   shelf:[['Comme le plan de travail (noir mat grainé)',WORKTOP_HEX],['Chêne clair','#cfae80'],['Chêne naturel','#b8894f'],['Noyer','#6f4a30'],['Blanc','#f1efe9'],['Gris béton','#9a9a95'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Vert sauge','#a7b39a']],
   basin:[['Rouge','#b3262e'],['Blanc','#f1efe9'],['Gris clair','#c9ccd0'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Chêne clair','#cfae80'],['Bleu','#5d7fa3'],['Vert sauge','#a7b39a']],
   kwin2:[['Blanc','#f4f3ef'],['Gris clair','#c9ccd0'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Chêne clair','#cfae80'],['Noyer','#6f4a30']],
@@ -2679,7 +2840,7 @@ const COLOR_PRESETS={
   washer:[['Blanc','#f2f2f0'],['Gris clair','#c9ccd0'],['Inox','#b5b9bc'],['Anthracite','#4a4f55'],['Noir','#1f2124'],['Rouge','#b3262e'],['Bleu','#5d7fa3'],['Vert sauge','#a7b39a']],
   armWood:[['Chêne','#cfae80'],['Châtaignier','#9a6a40'],['Noyer','#6f4a30'],['Merisier','#98492b'],['Blanc','#f1efe9'],['Vert d\'eau','#b9cbbf'],['Bleu gris','#8d9ea8']]
 };
-const colors={bedFrame:'#c9ccd0',bedPanel:'#e6c65a',bedLinen:'#d9dde3',armWood:'#cfae80',sofaFabric:'#8f9c98',tableWood:'#cfae80',chairWood:'#cfae80',chairFrame:'#3a3f43',reveal:'#f6f5f1',wallBack:'#f6f5f1',wallLeft:'#f6f5f1',wallRight:'#f6f5f1',wallFront:'#f6f5f1',kitchenFloor:'#8a4a33',bathFloor:'#e6e5e0',bathDoor:'#f1f0ec',showerFrame:'#c8ccd0',washer:'#f2f2f0',washerRing:'#dfe2e5',washerPort:'#1d2327',shelf:'#cfae80',cshelf:'#f1efe9',cshelfBoard:'#6f4a30',mirrorFrame:'#2b2b2b',basin:'#b3262e',kwin2:'#f4f3ef',wallKFar:'#f6f5f1',wallKRight:'#f6f5f1',wallKDoor:'#f6f5f1',wallKStudio:'#f6f5f1',wallBShower:'#f6f5f1',wallBBack:'#f6f5f1',wallBBasin:'#f6f5f1',wallBDoor:'#f6f5f1',bathTaps:'#dfe2e5'};
+const colors={fireFrame:'#1f2124',art1:'#c4553a',art2:'#2f6f8f',art3:'#d9a93a',bedFrame:'#c9ccd0',bedPanel:'#e6c65a',bedLinen:'#d9dde3',armWood:'#cfae80',sofaFabric:'#8f9c98',tableWood:'#cfae80',chairWood:'#cfae80',chairFrame:'#3a3f43',reveal:'#f6f5f1',wallBack:'#f6f5f1',wallLeft:'#f6f5f1',wallRight:'#f6f5f1',wallFront:'#f6f5f1',kitchenFloor:'#8a4a33',bathFloor:'#e6e5e0',bathDoor:'#f1f0ec',showerFrame:'#c8ccd0',washer:'#f2f2f0',washerRing:'#dfe2e5',washerPort:'#1d2327',shelf:'#cfae80',cshelf:'#f1efe9',cshelfBoard:'#6f4a30',mirrorFrame:'#2b2b2b',basin:'#b3262e',kwin2:'#f4f3ef',wallKFar:'#f6f5f1',wallKRight:'#f6f5f1',wallKDoor:'#f6f5f1',wallKStudio:'#f6f5f1',wallBShower:'#f6f5f1',wallBBack:'#f6f5f1',wallBBasin:'#f6f5f1',wallBDoor:'#f6f5f1',bathTaps:'#dfe2e5'};
 const COLOR_TARGETS={
   bedFrame:[()=>M.bedGrey,'bedFrameSw'],bedPanel:[()=>M.yellow,'bedPanelSw'],
   bedLinen:[()=>M.duvet,'bedLinenSw'],armWood:[()=>M.armWood,'armWoodSw'],
@@ -2688,7 +2849,7 @@ const COLOR_TARGETS={
   // murs, dans l'ordre de création : gauche, fond, droite, entrée
   wallLeft:[()=>walls[0].mat,'wallLeftSw'],wallBack:[()=>walls[1].mat,'wallBackSw'],
   wallRight:[()=>walls[2].mat,'wallRightSw'],wallFront:[()=>walls[3].mat,'wallFrontSw'],
-  kitchenFloor:[()=>M.kitchenFloor,'kitchenFloorSw'],bathFloor:[()=>M.bathFloor,'bathFloorSw'],
+  kitchenFloor:[()=>M.kitchenFloor,'kitchenFloorSw'],fireFrame:[()=>M.fireFrame,'fireFrameSw'],art1:[()=>artMats[0],'art1Sw'],art2:[()=>artMats[1],'art2Sw'],art3:[()=>artMats[2],'art3Sw'],bathFloor:[()=>M.bathFloor,'bathFloorSw'],
   bathDoor:[()=>M.bathDoor,'bathDoorSw'],showerFrame:[()=>M.showerFrame,'showerFrameSw'],washer:[()=>M.washer,'washerSw'],washerRing:[()=>M.washerRing,'washerRingSw'],washerPort:[()=>M.washerPort,'washerPortSw'],shelf:[()=>M.shelf,'shelfSw'],cshelf:[()=>M.cshelf,'cshelfSw'],cshelfBoard:[()=>M.cshelfBoard,'cshelfBoardSw'],mirrorFrame:[()=>M.mirrorFrame,'mirrorFrameSw'],basin:[()=>M.basinRed,'basinSw'],kwin2:[()=>M.kWin2,'kwin2Sw'],bathTaps:[()=>M.chrome,'bathTapsSw'],
   wallKFar:[()=>wallMat(kitchenFarG),'wallKFarSw'],wallKRight:[()=>wallMat(kitchenRightG),'wallKRightSw'],
   wallKDoor:[()=>wallMat(bathWallG.z0),'wallKDoorSw'],wallKStudio:[()=>kitchenStudioPaint,'wallKStudioSw'],
@@ -2704,6 +2865,8 @@ function applyColor(k){
   const[mat,sw]=COLOR_TARGETS[k];
   if(k==='bathFloor'){
     const old=M.bathFloor.map;M.bathFloor.map=bathFloorTex(colors[k]);M.bathFloor.needsUpdate=true;if(old)old.dispose();
+  }else if(/^art\d$/.test(k)){
+    buildArt(+k[3]-1);   // nouvelle toile générée dans la couleur choisie
   }else if(k==='kitchenFloor'){
     const old=M.kitchenFloor.map;M.kitchenFloor.map=tomette(colors[k]);M.kitchenFloor.needsUpdate=true;if(old)old.dispose();
   }else{
@@ -2716,7 +2879,7 @@ function applyColor(k){
       M.shelf.map=top?M.kTop.map:null;M.shelf.roughness=top?M.kTop.roughness:0.45;if(top)M.shelf.color.set('#ffffff');M.shelf.needsUpdate=true;
     }
   }
-  renderSwatches(sw,COLOR_PRESETS[k]||COLOR_PRESETS[k.startsWith('wall')?'wall':k],colors[k],c=>{colors[k]=c;applyColor(k);save();});
+  renderSwatches(sw,COLOR_PRESETS[k]||COLOR_PRESETS[k.startsWith('wall')?'wall':/^art\d$/.test(k)?'art1':k],colors[k],c=>{colors[k]=c;applyColor(k);save();});
   const room=Object.keys(WALL_ROOMS).find(r=>WALL_ROOMS[r].keys.includes(k));
   if(room)renderWallAll(room);
 }
@@ -2878,7 +3041,7 @@ function select(it){
   if(it&&it!==was)panelEl.scrollTo({top:0,behavior:reduceMotion?'auto':'smooth'});
   selBox.visible=!!it;
   if(it){selBox.setFromObject(it.obj);showSel(it);}
-  else{selEl.textContent=frozen?'Éléments figés : plus rien n\u2019est sélectionnable. Clique sur « Défiger les éléments » pour les modifier.':'Clique sur un meuble pour le sélectionner.';document.getElementById('sofaSizes').classList.remove('on');document.getElementById('wardSizes').classList.remove('on');document.getElementById('wardColors').classList.remove('on');document.getElementById('bedColors').classList.remove('on');document.getElementById('armColors').classList.remove('on');['tableColors','chairColors','fanSizes','sofaColors','bathDoorColors','showerColors','washerColors','tapColors','shelfSizes','shelfColors','basinColors','wcSet','cshelfSizes','cshelfColors','mirrorSizes','mirrorColors','acSizes','acColors','kwin2Sizes','kwin2Colors'].forEach(i=>document.getElementById(i).classList.remove('on'));document.getElementById('tableSizes').classList.remove('on');document.getElementById('tableNote').hidden=true;}
+  else{selEl.textContent=frozen?'Éléments figés : plus rien n\u2019est sélectionnable. Clique sur « Défiger les éléments » pour les modifier.':'Clique sur un meuble pour le sélectionner.';document.getElementById('sofaSizes').classList.remove('on');document.getElementById('wardSizes').classList.remove('on');document.getElementById('wardColors').classList.remove('on');document.getElementById('bedColors').classList.remove('on');document.getElementById('armColors').classList.remove('on');['tableColors','chairColors','fanSizes','sofaColors','bathDoorColors','showerColors','washerColors','tapColors','shelfSizes','shelfColors','basinColors','wcSet','cshelfSizes','cshelfColors','mirrorSizes','mirrorColors','acSizes','acColors','fireSizes','fireColors','artSizes','art1Colors','art2Colors','art3Colors','kwin2Sizes','kwin2Colors'].forEach(i=>document.getElementById(i).classList.remove('on'));document.getElementById('tableSizes').classList.remove('on');document.getElementById('tableNote').hidden=true;}
   rotBtn.disabled=rot15Btn.disabled=!it||!!it.wallSnap||!!it.fixed||!!it.noRotate;
   if(it&&it.onRotate)rot15Btn.disabled=true;
   delBtn.disabled=!it||!isRemovable(it);
@@ -2907,6 +3070,11 @@ function showSel(it){
   document.getElementById('mirrorSizes').classList.toggle('on',it.id==='mirror');
   document.getElementById('mirrorColors').classList.toggle('on',it.id==='mirror');
   document.getElementById('acSizes').classList.toggle('on',it.id==='ac');
+  document.getElementById('fireSizes').classList.toggle('on',it.id==='fire');
+  document.getElementById('fireColors').classList.toggle('on',it.id==='fire');
+  document.getElementById('artSizes').classList.toggle('on',/^art\d$/.test(it.id));
+  ['art1','art2','art3'].forEach(k=>document.getElementById(k+'Colors').classList.toggle('on',it.id===k));
+  if(/^art\d$/.test(it.id))syncArtInputs();
   document.getElementById('acColors').classList.toggle('on',it.id==='ac');
   document.getElementById('cshelfColors').classList.toggle('on',it.id==='cshelf');
   document.getElementById('tapColors').classList.toggle('on',it.id==='shower'||it.id==='basin'||it.id==='showercol');
@@ -2976,7 +3144,7 @@ function applyDefaults(){
   items.forEach(it=>{it.obj.position.set(it.def.x,0,it.def.z);it.obj.rotation.y=it.def.r;});
   items.forEach(it=>{if(it.wallSnap)snapWall(it);});
 }
-const showState={bed:true,sofa:true,table:true,chairs:true,wardrobe:true,fan:true,plant:true,garden:true,mountains:true,kitchen:true,shelf:true};
+const showState={bed:true,sofa:true,table:true,chairs:true,wardrobe:true,fan:true,plant:true,garden:true,mountains:true,kitchen:true,shelf:true,fire:true,art:true};
 function groupItems(k){
   if(k==='bed')return[bedItem];
   if(k==='sofa')return[sofaItem];
@@ -2985,6 +3153,8 @@ function groupItems(k){
   if(k==='fan')return[fanItem];
   if(k==='garden'||k==='mountains')return[];
   if(k==='shelf')return[shelfItem];
+  if(k==='fire')return[fireItem];
+  if(k==='art')return artItems;
   if(k==='kitchen')return[kitchenItem,wcItem,basinItem,washerItem,showerColItem,cshelfItem,mirrorItem,acItem];
   if(k==='plant')return[plantItem];
   return items.filter(i=>i.id.startsWith('chair'));
@@ -3019,7 +3189,7 @@ document.querySelectorAll('[data-show]').forEach(b=>b.addEventListener('click',(
 function getState(){
   const o={v:1,bedSpotsOn,bedUp:bedTarget,doorsOpen:Object.fromEntries(openables.map(o=>[o.id,o.target])),view:{cam:camera.position.toArray(),tgt:controls.target.toArray()},ambiance,fanLampOn,spotsOn,spotCount,fanOn,fanSize,pillowSide,colors,floor:floorState,wardColor,entryCup,sofaBack:sofaBackTarget,tableOpen:tableTarget,sofa:sofaSize,table:tableSize,shelf:Object.assign({},shelfSize),cshelf:Object.assign({},cshelf),mirror:Object.assign({},mirror),kwin2:{w:kWin2.w,h:kWin2.h,y:kWin2.y},ward:wardSize,show:showState,removed:[...removed],frozen,kCeilOn,kUnderOn,bathOn,showerType,bathTiles:Object.assign({},bathTiles),bathFloorTiles:Object.assign({},bathFloorTiles),tileTone,dayLevel,bathDoorStyle,sitter:sitterOn,dimsOn,wcCorner,walkRecul:walk.recul,walkH:Math.round(walk.h*100),dim:Object.assign({},dim),items:{}};
   items.forEach(it=>o.items[it.id]={x:it.obj.position.x,z:it.obj.position.z,r:it.obj.rotation.y});
-  o.fauxCeil=fauxCeil;o.ac={y:ac.y};
+  o.fauxCeil=fauxCeil;o.ac={y:ac.y};o.fire=fire;o.fireOn=fireOn;o.arts=arts;
   return JSON.parse(JSON.stringify(o));
 }
 // Sauvegarde automatique : chaque changement (déplacement, taille, couleur, état, vue) est gardé aussitôt.
@@ -3065,6 +3235,9 @@ function loadInto(s){
   if(s&&s.show)Object.assign(showState,s.show);
   if(s&&Array.isArray(s.removed)){removed.clear();s.removed.forEach(id=>removed.add(id));}
   if(s&&typeof s.frozen==='boolean')frozen=s.frozen;
+  if(s&&s.fire&&s.fire.w){fire.w=Math.min(1.8,Math.max(0.5,+s.fire.w));fire.h=Math.min(1,Math.max(0.3,+s.fire.h||0.5));fire.y=Math.min(H-0.1-fire.h,Math.max(0,+s.fire.y||0));buildFire();fireInfo();syncFireInputs();}
+  if(s&&typeof s.fireOn==='boolean'){fireOn=s.fireOn;applyFire();}
+  if(s&&Array.isArray(s.arts))s.arts.forEach((a,i)=>{if(arts[i]&&a&&a.w){arts[i].w=Math.min(2,Math.max(0.2,+a.w));arts[i].h=Math.min(2,Math.max(0.2,+a.h||0.5));arts[i].y=Math.min(H-0.05-arts[i].h,Math.max(0.3,+a.y||1.2));artInfo(i);}});
   if(s&&s.ac&&typeof s.ac.y==='number'){ac.y=Math.min(2.70,Math.max(1.50,s.ac.y));buildAC();acInfo();syncAcInputs();}
   if(s&&s.fauxCeil){
     ['studio','kitchen','bath'].forEach(k=>{const f=s.fauxCeil[k];if(f){fauxCeil[k].on=!!f.on;if(typeof f.h==='number')setFauxH(k,f.h*100);}});
@@ -3690,7 +3863,7 @@ document.getElementById('resetBtn').addEventListener('click',()=>{
   Object.assign(sofaSize,{w:1.60,d:0.88,h:0.80});buildSofa();sofaInfo();syncSofaInputs();
   Object.assign(wardSize,{w:0.90,d:0.55,h:2.10});buildWardrobe();wardInfo();syncWardInputs();
   Object.assign(tableSize,{w:0.80,d:0.70,h:0.75});buildTable();tableInfo();syncTableInputs();
-  Object.assign(showState,{bed:true,sofa:true,table:true,chairs:true,wardrobe:true,fan:true,plant:true,garden:true,mountains:true,kitchen:true,shelf:true});applyShow();
+  Object.assign(showState,{bed:true,sofa:true,table:true,chairs:true,wardrobe:true,fan:true,plant:true,garden:true,mountains:true,kitchen:true,shelf:true,fire:true,art:true});applyShow();
   sofaBackTarget=0;sofaBackT=0;syncSofaBackBtn();sofaBack.rotation.x=0;
   shelfSize.w=0.65;shelfSize.d=0.60;shelfSize.y=0.86;shelfSize.f=0.30;shelfItem.w=shelfSize.w;shelfItem.d=shelfSize.d;buildShelf();shelfInfo();syncShelfInputs();
   ac.y=WINY1+0.10;buildAC();acInfo();syncAcInputs();
@@ -3725,6 +3898,7 @@ function frame(){
 
   fanSpeed+=((fanOn&&showState.fan?9:0)-fanSpeed)*Math.min(1,dt*(fanOn?0.8:0.5));
   if(fanRotor)fanRotor.rotation.y+=fanSpeed*dt;
+  animateFire(clock.elapsedTime);
   bedGroup.position.y=LOW+(bedHigh()-LOW)*ease(bedT);
   bedLegs.visible=bedT<0.02;
 
