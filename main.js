@@ -4,7 +4,7 @@
 //  - de la copie modifiable dans « Documents\Studio 3D » si elle existe (menu Code > Modifier le code),
 //  - sinon du fichier livré avec l'application.
 // Quand la copie modifiable change sur le disque, la fenêtre se recharge toute seule.
-const { app, BrowserWindow, Menu, shell, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog, ipcMain, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -195,6 +195,22 @@ ipcMain.handle('plan:write', async (_, { path: file, data }) => {
 });
 ipcMain.on('plan:document', (_, d) => { doc = { name: String(d.name || ''), path: d.path || null, dirty: !!d.dirty }; updateTitle(); });
 ipcMain.on('plan:list', (_, list) => { appPlans = Array.isArray(list) ? list.slice(0, 50) : []; refreshMenu(); });
+// Connexion GitHub des plans (dépôt et jeton) : gardée chiffrée par Windows dans le dossier de l'application
+const SECRET_FILE = path.join(app.getPath('userData'), 'github.bin');
+ipcMain.handle('secret:get', async () => {
+  try {
+    const buf = await fsp.readFile(SECRET_FILE);
+    return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(buf) : null;
+  } catch (e) { return null; }
+});
+ipcMain.handle('secret:set', async (_, value) => {
+  try {
+    if (!value) { await fsp.unlink(SECRET_FILE).catch(() => {}); return true; }
+    if (!safeStorage.isEncryptionAvailable()) return false;
+    await fsp.writeFile(SECRET_FILE, safeStorage.encryptString(String(value)));
+    return true;
+  } catch (e) { log('secret:set', e.message); return false; }
+});
 ipcMain.on('app:alert', (_, msg) => { if (win) dialog.showMessageBox(win, { type: 'warning', message: String(msg) }); });
 
 let userCopy = null;   // mémorisé : évite d'interroger le dossier Documents à chaque changement de titre
@@ -352,6 +368,7 @@ function buildMenu() {
         { type: 'separator' },
         { label: 'Enregistrer', accelerator: 'CmdOrCtrl+S', click: save },
         { label: 'Enregistrer sous…', accelerator: 'CmdOrCtrl+Shift+S', click: saveAs },
+        { label: 'Plans sur GitHub…', accelerator: 'CmdOrCtrl+G', click: () => { if (checkPage()) sendMenu('githubDialog'); } },
         { label: 'Ouvrir le dossier des plans', click: () => { ensurePlansDir().then(d => shell.openPath(d), e => dialog.showErrorBox('Studio 3D', e.message)); } },
         { type: 'separator' },
         { label: 'Recharger', accelerator: 'CmdOrCtrl+R', click: load },

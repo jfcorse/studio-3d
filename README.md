@@ -31,6 +31,16 @@ Les plans se gèrent dans le menu **Fichier** :
 
 Dans un navigateur, la section « Mes plans » du panneau reste disponible.
 
+### Plans sur GitHub
+
+**Fichier > Plans sur GitHub…** (Ctrl+G), ou le bouton du même nom dans « Mes plans » du navigateur, enregistre et ouvre les plans dans un **dépôt GitHub privé** (dossier `plans`). On retrouve ainsi les mêmes plans sur tous ses PC.
+
+À faire une seule fois :
+
+1. Sur GitHub, crée un dépôt **privé**, par exemple `studio-3d-plans` (coche « Add a README »).
+2. **Settings > Developer settings > Personal access tokens > Fine-grained tokens > Generate new token** : « Only select repositories » → ce dépôt ; **Permissions > Repository > Contents : Read and write**.
+3. Dans l'application, saisis le dépôt (`compte/studio-3d-plans`) et le jeton. À refaire sur chaque PC : dans l'application, le jeton est gardé chiffré par Windows.
+
 ## Modifier le code depuis l'application
 
 Menu **Code** :

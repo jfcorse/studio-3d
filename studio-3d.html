@@ -371,6 +371,7 @@ button.ghost{border-color:var(--line);color:var(--muted)}
     <div class="actions">
       <button id="planExport" class="ghost">Exporter en fichier</button>
       <button id="planImport" class="ghost">Importer un fichier</button>
+      <button id="planGithub" class="ghost">Plans sur GitHub…</button>
       <input type="file" id="planFile" accept=".json,application/json" hidden>
     </div>
     <p class="note" id="planNote" style="margin:8px 0 0" hidden></p>
@@ -2860,6 +2861,120 @@ planFile.addEventListener('change',async()=>{
   }catch(e){note('Ce fichier n\u2019est pas un plan du studio. Choisis un fichier exporté depuis cette page.');}
 });
 
+/* ---------- Plans sur GitHub : enregistrer et ouvrir des plans dans un dépôt GitHub privé ----------
+   L'accès se fait avec un jeton personnel (fine-grained, limité à ce dépôt, droit « Contents : Read and write »).
+   Dans l'application Windows, le jeton est gardé chiffré par Windows ; dans un navigateur, dans ce navigateur seulement.
+   Les plans sont des fichiers .json dans le dossier « plans » du dépôt. */
+const ghStore={
+  async get(){try{if(window.studioApp&&studioApp.secretGet){const v=await studioApp.secretGet();if(v)return JSON.parse(v);}}catch(e){}
+    try{return JSON.parse(localStorage.getItem('studio3d-github')||'null');}catch(e){return null;}},
+  async set(cfg){const v=cfg?JSON.stringify(cfg):'';let ok=false;
+    try{if(window.studioApp&&studioApp.secretSet)ok=await studioApp.secretSet(v);}catch(e){}
+    try{if(ok||!cfg)localStorage.removeItem('studio3d-github');else localStorage.setItem('studio3d-github',v);}catch(e){}}
+};
+const b64enc=str=>{const u=new TextEncoder().encode(str);let b='';for(let i=0;i<u.length;i+=0x8000)b+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(b);};
+const b64dec=b64=>new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g,'')),c=>c.charCodeAt(0)));
+async function ghCall(cfg,path,opt={}){
+  const r=await fetch('https://api.github.com/repos/'+cfg.repo+'/contents/'+path,Object.assign({},opt,{headers:{
+    Authorization:'Bearer '+cfg.token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Content-Type':'application/json'}}));
+  if(r.status===404)return null;
+  if(!r.ok){let m='';try{m=(await r.json()).message;}catch(e){}
+    throw new Error(r.status===401?'jeton refusé (vérifie-le ou crée-en un nouveau)':r.status===403?'accès refusé : le jeton doit avoir le droit « Contents : Read and write » sur ce dépôt':'GitHub a répondu '+r.status+(m?' ('+m+')':''));}
+  return r.json();
+}
+const ghList=async cfg=>((await ghCall(cfg,'plans'))||[]).filter(f=>f.type==='file'&&/\.json$/i.test(f.name));
+const ghFileName=name=>name.replace(/[\\/:*?"<>|#%]+/g,'-').trim().slice(0,80)+'.json';
+async function ghSave(cfg,name){
+  const path='plans/'+encodeURIComponent(ghFileName(name));
+  const old=await ghCall(cfg,path);
+  const body={message:'Plan « '+name+' »',content:b64enc(JSON.stringify({app:'studio-3d',name,savedAt:Date.now(),state:getState()},null,2))};
+  if(old&&old.sha)body.sha=old.sha;
+  await ghCall(cfg,path,{method:'PUT',body:JSON.stringify(body)});
+}
+async function ghOpen(cfg,file){
+  const f=await ghCall(cfg,'plans/'+encodeURIComponent(file.name));
+  const j=JSON.parse(b64dec(f.content)),st=j&&j.state?j.state:j;
+  if(!st||!st.items)throw new Error('ce fichier n\u2019est pas un plan du studio');
+  applyPlan(st);
+  const name=j.name||file.name.replace(/\.json$/i,'');
+  if(window.onPlanOpened)window.onPlanOpened(name);
+  const el=document.getElementById('autosave');if(el)el.textContent='Plan « '+name+' » ouvert depuis GitHub.';
+  return name;
+}
+const ghDlg=document.createElement('dialog');ghDlg.className='appdlg';document.body.appendChild(ghDlg);
+const ghEsc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function ghShow(html){ghDlg.innerHTML=html;if(!ghDlg.open)ghDlg.showModal();ghDlg.querySelectorAll('[data-a=cancel]').forEach(b=>b.onclick=()=>ghDlg.close());}
+async function githubDialog(){
+  const cfg=await ghStore.get();
+  if(!cfg||!cfg.repo||!cfg.token){ghSetup();return;}
+  ghShow('<h3>Plans sur GitHub</h3><p>Dépôt <strong>'+ghEsc(cfg.repo)+'</strong> — lecture des plans…</p><div class="dlgbtns"><button class="ghost" data-a="cancel">Fermer</button></div>');
+  let files;
+  try{files=await ghList(cfg);}catch(e){ghSetup(cfg,'Connexion impossible : '+e.message);return;}
+  if(!ghDlg.open)return;
+  const def=(window.currentPlanName&&window.currentPlanName())||'Plan du studio';
+  ghShow('<h3>Plans sur GitHub</h3><p>Dépôt <strong>'+ghEsc(cfg.repo)+'</strong></p>'+
+    '<p style="margin:0 0 6px">Enregistrer le plan actuel sous :</p>'+
+    '<div class="planrow"><input type="text" id="ghName" maxlength="80" aria-label="Nom du plan" value="'+ghEsc(def)+'"><button id="ghSave" aria-pressed="true">Enregistrer</button></div>'+
+    '<p class="warn" id="ghWarn" hidden></p>'+
+    '<p style="margin:10px 0 6px">Ouvrir un plan :</p>'+(files.length
+      ?'<ul>'+files.map((f,i)=>'<li><button data-i="'+i+'"><span>'+ghEsc(f.name.replace(/\.json$/i,''))+'</span><span class="d">'+Math.max(1,Math.round(f.size/1024))+' Ko</span></button></li>').join('')+'</ul>'
+      :'<p>Aucun plan sur GitHub pour l\u2019instant.</p>')+
+    '<div class="dlgbtns"><button class="ghost left" data-a="setup">Changer de dépôt ou de jeton</button><button class="ghost" data-a="cancel">Fermer</button></div>');
+  const warn=ghDlg.querySelector('#ghWarn'),inp=ghDlg.querySelector('#ghName'),sv=ghDlg.querySelector('#ghSave');
+  const fail=e=>{warn.hidden=false;warn.textContent='Problème : '+(e&&e.message||e);sv.disabled=false;};
+  let confirmFor=null;
+  inp.addEventListener('input',()=>{confirmFor=null;warn.hidden=true;sv.textContent='Enregistrer';});
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sv.click();}});
+  sv.onclick=async()=>{
+    const name=inp.value.trim();if(!name){inp.focus();return;}
+    const exists=files.some(f=>f.name===ghFileName(name));
+    if(exists&&confirmFor!==name){confirmFor=name;warn.hidden=false;warn.textContent='Un plan « '+name+' » existe déjà sur GitHub : clique encore sur « Remplacer » pour l\u2019écraser.';sv.textContent='Remplacer';return;}
+    sv.disabled=true;sv.textContent='Envoi…';
+    try{await ghSave(cfg,name);ghDlg.close();if(window.onPlanOpened)window.onPlanOpened(name);
+      const el=document.getElementById('autosave');if(el)el.textContent='Plan « '+name+' » enregistré sur GitHub ('+cfg.repo+').';}
+    catch(e){fail(e);sv.textContent='Enregistrer';}
+  };
+  ghDlg.querySelectorAll('li button').forEach(b=>b.onclick=async()=>{
+    b.disabled=true;
+    try{await ghOpen(cfg,files[+b.dataset.i]);ghDlg.close();}catch(e){b.disabled=false;fail(e);}
+  });
+  ghDlg.querySelector('[data-a=setup]').onclick=()=>ghSetup(cfg);
+}
+function ghSetup(cfg,err){
+  cfg=cfg||{};
+  ghShow('<h3>Connexion à GitHub</h3>'+
+    '<p>Les plans sont enregistrés dans un <strong>dépôt privé</strong> (dossier « plans »). À faire une seule fois sur GitHub :</p>'+
+    '<p>1. Crée un dépôt privé, par exemple <em>studio-3d-plans</em> (coche « Add a README »).<br>'+
+    '2. Settings › Developer settings › Personal access tokens › <em>Fine-grained tokens</em> › Generate new token : '+
+    '« Only select repositories » → ce dépôt ; Permissions › Repository › <em>Contents : Read and write</em>.<br>'+
+    '3. Colle ici le dépôt et le jeton (à refaire sur chaque PC).</p>'+
+    '<input type="text" id="ghRepo" placeholder="compte/dépôt, ex. jfcorse/studio-3d-plans" value="'+ghEsc(cfg.repo||'')+'" aria-label="Dépôt GitHub">'+
+    '<input type="text" id="ghTok" placeholder="Jeton github_pat_…" value="'+ghEsc(cfg.token||'')+'" aria-label="Jeton GitHub" autocomplete="off" spellcheck="false">'+
+    '<p class="warn" id="ghWarn"'+(err?'':' hidden')+'>'+ghEsc(err||'')+'</p>'+
+    '<div class="dlgbtns">'+(cfg.token?'<button class="ghost left" data-a="forget">Oublier sur ce PC</button>':'')+'<button class="ghost" data-a="cancel">Annuler</button><button data-a="ok" aria-pressed="true">Se connecter</button></div>');
+  const warn=ghDlg.querySelector('#ghWarn'),ok=ghDlg.querySelector('[data-a=ok]');
+  ok.onclick=async()=>{
+    const repo=ghDlg.querySelector('#ghRepo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'').replace(/\/$/,'');
+    const token=ghDlg.querySelector('#ghTok').value.trim();
+    if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){warn.hidden=false;warn.textContent='Le dépôt s\u2019écrit compte/nom, par exemple jfcorse/studio-3d-plans.';return;}
+    if(!token){warn.hidden=false;warn.textContent='Colle le jeton créé sur GitHub.';return;}
+    ok.disabled=true;ok.textContent='Vérification…';
+    try{
+      const r=await fetch('https://api.github.com/repos/'+repo,{headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json'}});
+      if(r.status===401)throw new Error('jeton refusé');
+      if(r.status===404)throw new Error('dépôt introuvable (ou le jeton n\u2019y a pas accès)');
+      if(!r.ok)throw new Error('GitHub a répondu '+r.status);
+      const info=await r.json();
+      await ghStore.set({repo,token});
+      if(!info.private){warn.hidden=false;warn.textContent='Attention : ce dépôt est public, tes plans seront visibles par tous. Connexion enregistrée quand même.';}
+      setTimeout(githubDialog,info.private?0:2500);
+    }catch(e){warn.hidden=false;warn.textContent='Connexion impossible : '+e.message;ok.disabled=false;ok.textContent='Se connecter';}
+  };
+  const fg=ghDlg.querySelector('[data-a=forget]');
+  if(fg)fg.onclick=async()=>{await ghStore.set(null);ghDlg.close();};
+}
+document.getElementById('planGithub').addEventListener('click',githubDialog);
+
 /* ---------- Application Windows : les plans passent par le menu Fichier ----------
    Dans l'application, « Mes plans » quitte le panneau : Fichier > Nouveau, Ouvrir, Ouvrir récent,
    Enregistrer (Ctrl+S) et Enregistrer sous enregistrent le plan dans un fichier .json.
@@ -2951,6 +3066,9 @@ if(desktop){
       if(p){try{loadPlanJson(await desktop.readFile(p),p);}catch(e){desktop.alert('Ce fichier n\u2019est pas un plan du studio.');}}
     };
   }
+  // plan ouvert ou enregistré sur GitHub : il devient le plan courant (sans fichier sur le PC)
+  window.onPlanOpened=name=>{curPath=null;curName=name;dirty=false;syncTitle();};
+  window.currentPlanName=()=>curName;
   function loadPlanJson(text,path){
     const j=JSON.parse(text);const st=j&&j.state?j.state:j;
     if(!st||!st.items)throw new Error('format');
@@ -2964,6 +3082,7 @@ if(desktop){
       else if(cmd==='saveAsDialog')await saveAsDialog();
       else if(cmd==='openDialog')await openDialog();
       else if(cmd==='newDialog')newDialog();
+      else if(cmd==='githubDialog')await githubDialog();
       else if(cmd==='new')newPlan();
       else if(cmd==='opened')loadPlanJson(arg.data,arg.path);
       else if(cmd==='openPlan'){const p=plansCache.find(x=>x.id===arg);if(p&&p.state){applyPlan(p.state);curPath=null;curName=p.name||'';dirty=true;syncTitle();showMsg('Plan « '+curName+' » ouvert. Fichier > Enregistrer sous pour le garder dans un fichier.');}}

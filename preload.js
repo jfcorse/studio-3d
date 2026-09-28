@@ -19,4 +19,7 @@ contextBridge.exposeInMainWorld('studioApp', {
   setPlans: list => ipcRenderer.send('plan:list', list),
   alert: msg => ipcRenderer.send('app:alert', msg),
   log: msg => ipcRenderer.send('app:log', msg),
+  // connexion GitHub des plans, chiffrée par Windows (null si indisponible)
+  secretGet: () => ipcRenderer.invoke('secret:get'),
+  secretSet: value => ipcRenderer.invoke('secret:set', value),
 });
