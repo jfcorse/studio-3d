@@ -285,7 +285,7 @@ button.ghost{border-color:var(--line);color:var(--muted)}
       <p class="swlabel">Planche fixée sur l'étagère (aux dimensions des étagères)</p>
       <div class="seg" style="flex-wrap:wrap">
         <button data-cboard="back" aria-pressed="true">Planche du fond</button>
-        <button data-cboard="side" aria-pressed="false">Planche côté droit</button>
+        <button data-cboard="side" aria-pressed="false">Planche côté libre</button>
       </div>
       <p class="swlabel">Couleur de la planche</p><div class="swatches" id="cshelfBoardSw"></div>
     </div>
@@ -2344,17 +2344,21 @@ shelfInfo();
    la porte coulissante ouverte (6 cm de recul pour la porte). Longueur, profondeur, hauteur, nombre d'étagères et
    couleur réglables ; elle se cale dans l'angle de la cuisine le plus proche et peut être supprimée (touche Suppr). */
 M.cshelf=new THREE.MeshStandardMaterial({color:0xf1efe9,roughness:0.5});
-const cshelf={w:0.50,d:0.30,h:1.80,n:5,back:true,side:false};   // back / side : planche du fond (contre le mur) / côté droit
+const cshelf={w:0.50,d:0.30,h:1.80,n:5,back:true,side:false,turn:false};   // back / side : planche du fond (contre le mur) / côté libre ; turn : pivotée dans l'angle
 M.cshelfBoard=new THREE.MeshStandardMaterial({color:0x6f4a30,roughness:0.55});
 const cshelfG=new THREE.Group();
+const boxM=box;   // box « normal », pour la version en miroir ci-dessous
 function buildCShelf(){
   while(cshelfG.children.length){const c=cshelfG.children.pop();c.geometry&&c.geometry.dispose();}
-  // repère centré : dos le long de z = +d/2 (mur), panneau de gauche contre x = +w/2 (autre mur), côté droit (x = −w/2) libre
-  const W=cshelf.w,Dp=cshelf.d,x0=-W/2,x1=W/2,z0=-Dp/2,z1=Dp/2;
+  // repère centré : dos le long de z = +d/2 (mur), panneau de gauche contre x = +w/2 (autre mur), côté droit (x = −w/2) libre ;
+  // pivotée (dos contre l'autre mur de l'angle), elle est construite en miroir : panneau en x = −w/2, côté libre en x = +w/2
+  const W=cshelf.w,Dp=cshelf.d,z0=-Dp/2,z1=Dp/2,sg=cshelf.turn?-1:1;
+  const box=(g,m,a,b,y0,y1,c,d,cast)=>boxM(g,m,Math.min(sg*a,sg*b),Math.max(sg*a,sg*b),y0,y1,c,d,cast);
+  const x0=-W/2,x1=W/2;
   box(cshelfG,M.cshelf,x1-0.018,x1,0,cshelf.h,z0,z1);   // panneau de gauche
   const zb=cshelf.back?z1-0.012:z1,xs=cshelf.side?x0+0.018:x0;
   if(cshelf.back)box(cshelfG,M.cshelfBoard,x0,x1-0.018,0,cshelf.h,z1-0.012,z1);   // planche du fond, contre le mur
-  if(cshelf.side)box(cshelfG,M.cshelfBoard,x0,x0+0.018,0,cshelf.h,z0,zb);         // planche côté droit
+  if(cshelf.side)box(cshelfG,M.cshelfBoard,x0,x0+0.018,0,cshelf.h,z0,zb);         // planche du côté libre
   for(let i=0;i<cshelf.n;i++){
     const y=0.10+i*(cshelf.h-0.12)/(cshelf.n-1);
     box(cshelfG,M.cshelf,xs,x1-0.018,y-0.011,y+0.011,z0,zb);
@@ -2364,16 +2368,20 @@ function buildCShelf(){
 buildCShelf();
 const CSHELF_GAP=0.06;   // recul devant la porte coulissante
 const cshelfItem=addItem('cshelf','Étagère d\u2019angle',cshelfG,cshelf.w,cshelf.d,{x:KX0-cshelf.w/2,z:KZ1-CSHELF_GAP-cshelf.d/2,r:0},'');
-cshelfItem.noRotate=true;
+// « Pivoter de 90° » (touche R) : dans son angle, le dos passe contre l'autre mur
+cshelfItem.onRotate=()=>{
+  cshelf.turn=!cshelf.turn;buildCShelf();cshelfInfo();clampItem(cshelfItem);
+  if(selected===cshelfItem){selBox.setFromObject(cshelfG);showSel(cshelfItem);}
+};
 cshelfItem.snapFn=it=>{
   const p=it.obj.position,mx=(KX0+KX1)/2,mz=(KZ0+KZ1)/2;
   const dx=p.x<mx?1:-1,dz=p.z<mz?1:-1,cx=dx>0?KX1:KX0,cz=dz>0?KZ0:KZ1;
-  const r=dx<0&&dz<0?0:dx<0?Math.PI/2:dz>0?Math.PI:-Math.PI/2,side=Math.abs(Math.sin(r))>0.5;
+  const r=(dx<0&&dz<0?0:dx<0?Math.PI/2:dz>0?Math.PI:-Math.PI/2)+(cshelf.turn?Math.PI/2:0),side=Math.abs(Math.sin(r))>0.5;   // pivotée : dos contre l'autre mur
   const hx=(side?cshelf.d:cshelf.w)/2,hz=(side?cshelf.w:cshelf.d)/2;
   const gap=(cx===KX0&&cz===KZ1)?CSHELF_GAP:0;   // angle de la porte coulissante
   p.set(cx+dx*hx,0,cz+dz*(hz+gap));it.obj.rotation.y=r;
 };
-function cshelfInfo(){cshelfItem.info=Math.round(cshelf.w*100)+' × '+Math.round(cshelf.d*100)+' cm, hauteur '+Math.round(cshelf.h*100)+' cm, '+cshelf.n+' étagères'+(cshelf.back?', planche du fond':'')+(cshelf.side?', planche côté droit':', sans montant côté droit')+' ; glisse-la vers un autre angle, touche Suppr pour l\u2019enlever';}
+function cshelfInfo(){cshelfItem.info=Math.round(cshelf.w*100)+' × '+Math.round(cshelf.d*100)+' cm, hauteur '+Math.round(cshelf.h*100)+' cm, '+cshelf.n+' étagères'+(cshelf.back?', planche du fond':'')+(cshelf.side?', planche du côté libre':', côté libre sans montant')+' ; glisse-la vers un autre angle, « Pivoter de 90° » (touche R) pour mettre son dos contre l\u2019autre mur, touche Suppr pour l\u2019enlever';}
 cshelfInfo();
 {
   const iw=document.getElementById('cshelfW'),id_=document.getElementById('cshelfD'),ih=document.getElementById('cshelfH'),inn=document.getElementById('cshelfN');
@@ -2866,6 +2874,7 @@ function select(it){
   if(it){selBox.setFromObject(it.obj);showSel(it);}
   else{selEl.textContent=frozen?'Éléments figés : plus rien n\u2019est sélectionnable. Clique sur « Défiger les éléments » pour les modifier.':'Clique sur un meuble pour le sélectionner.';document.getElementById('sofaSizes').classList.remove('on');document.getElementById('wardSizes').classList.remove('on');document.getElementById('wardColors').classList.remove('on');document.getElementById('bedColors').classList.remove('on');document.getElementById('armColors').classList.remove('on');['tableColors','chairColors','fanSizes','sofaColors','bathDoorColors','showerColors','washerColors','tapColors','shelfSizes','shelfColors','basinColors','wcSet','cshelfSizes','cshelfColors','mirrorSizes','mirrorColors','acSizes','acColors','kwin2Sizes','kwin2Colors'].forEach(i=>document.getElementById(i).classList.remove('on'));document.getElementById('tableSizes').classList.remove('on');document.getElementById('tableNote').hidden=true;}
   rotBtn.disabled=rot15Btn.disabled=!it||!!it.wallSnap||!!it.fixed||!!it.noRotate;
+  if(it&&it.onRotate)rot15Btn.disabled=true;
   delBtn.disabled=!it||!isRemovable(it);
 }
 function showSel(it){
@@ -2900,6 +2909,7 @@ function showSel(it){
 }
 function rotate(deg){
   if(!selected||selected.wallSnap||selected.fixed||selected.noRotate)return;
+  if(selected.onRotate){if(Math.abs(deg)>=90){selected.onRotate();save();}return;}   // pivot propre à l'élément (étagère d'angle)
   selected.obj.rotation.y+=deg*Math.PI/180;
   clampItem(selected);save();
 }
@@ -3042,7 +3052,7 @@ function loadInto(s){
   if(s&&s.sofa&&s.sofa.w){Object.assign(sofaSize,s.sofa);buildSofa();sofaInfo();}
   if(s&&s.table&&s.table.w){Object.assign(tableSize,s.table);buildTable();tableInfo();}
   if(s&&s.shelf&&s.shelf.w){shelfSize.w=Math.min(2,Math.max(0.3,+s.shelf.w));shelfSize.d=Math.min(0.8,Math.max(0.2,+s.shelf.d||0.6));shelfSize.y=typeof s.shelf.y==='number'?Math.min(2.2,Math.max(0.4,s.shelf.y)):0.86;shelfSize.f=typeof s.shelf.f==='number'?Math.min(0.7,Math.max(0,s.shelf.f)):0.30;shelfItem.w=shelfSize.w;shelfItem.d=shelfSize.d;buildShelf();shelfInfo();syncShelfInputs();}
-  if(s&&s.cshelf&&s.cshelf.w){cshelf.w=Math.min(1,Math.max(0.3,+s.cshelf.w));cshelf.d=Math.min(0.5,Math.max(0.15,+s.cshelf.d||0.3));cshelf.h=Math.min(2.2,Math.max(0.6,+s.cshelf.h||1.8));cshelf.n=Math.min(8,Math.max(2,Math.round(+s.cshelf.n||5)));cshelf.back=s.cshelf.back!==false;cshelf.side=!!s.cshelf.side;cshelfItem.w=cshelf.w;cshelfItem.d=cshelf.d;buildCShelf();cshelfInfo();syncCShelfInputs();}
+  if(s&&s.cshelf&&s.cshelf.w){cshelf.w=Math.min(1,Math.max(0.3,+s.cshelf.w));cshelf.d=Math.min(0.5,Math.max(0.15,+s.cshelf.d||0.3));cshelf.h=Math.min(2.2,Math.max(0.6,+s.cshelf.h||1.8));cshelf.n=Math.min(8,Math.max(2,Math.round(+s.cshelf.n||5)));cshelf.back=s.cshelf.back!==false;cshelf.side=!!s.cshelf.side;cshelf.turn=!!s.cshelf.turn;cshelfItem.w=cshelf.w;cshelfItem.d=cshelf.d;buildCShelf();cshelfInfo();syncCShelfInputs();}
   if(s&&s.mirror&&s.mirror.w){mirror.w=Math.min(1.5,Math.max(0.2,+s.mirror.w));mirror.h=Math.min(1.5,Math.max(0.2,+s.mirror.h||0.6));mirror.y=Math.min(H-0.05-mirror.h,Math.max(0.4,+s.mirror.y||1.1));mirrorItem.d=mirror.w;buildMirror();mirrorInfo();syncMirrorInputs();}
   if(s&&s.kwin2&&s.kwin2.w){kWin2.w=Math.min(0.8,Math.max(0.2,+s.kwin2.w));kWin2.h=Math.min(0.65,Math.max(0.2,+s.kwin2.h||0.35));kWin2.y=Math.min(H-0.05-kWin2.h,Math.max(0.95,+s.kwin2.y||1.60));buildKitchenRight();syncKWin2Inputs();}
   if(s&&s.tableOpen===0){tableTarget=0;tableT=0;}
@@ -3679,7 +3689,7 @@ document.getElementById('resetBtn').addEventListener('click',()=>{
   shelfSize.w=0.65;shelfSize.d=0.60;shelfSize.y=0.86;shelfSize.f=0.30;shelfItem.w=shelfSize.w;shelfItem.d=shelfSize.d;buildShelf();shelfInfo();syncShelfInputs();
   ac.y=WINY1+0.10;buildAC();acInfo();syncAcInputs();
   Object.assign(mirror,{w:0.45,h:0.60,y:1.10});mirrorItem.d=mirror.w;buildMirror();mirrorInfo();syncMirrorInputs();
-  Object.assign(cshelf,{w:0.50,d:0.30,h:1.80,n:5,back:true,side:false});cshelfItem.w=cshelf.w;cshelfItem.d=cshelf.d;buildCShelf();cshelfInfo();syncCShelfInputs();
+  Object.assign(cshelf,{w:0.50,d:0.30,h:1.80,n:5,back:true,side:false,turn:false});cshelfItem.w=cshelf.w;cshelfItem.d=cshelf.d;buildCShelf();cshelfInfo();syncCShelfInputs();
   kWin2.w=0.45;kWin2.h=0.35;kWin2.y=1.60;buildKitchenRight();syncKWin2Inputs();
   applyDefaults();tableTarget=1;syncTableBtn();select(null);save();
 });
