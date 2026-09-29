@@ -3536,7 +3536,7 @@ const ghStore={
 const b64enc=str=>{const u=new TextEncoder().encode(str);let b='';for(let i=0;i<u.length;i+=0x8000)b+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(b);};
 const b64dec=b64=>new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g,'')),c=>c.charCodeAt(0)));
 async function ghCall(cfg,path,opt={}){
-  const r=await fetch('https://api.github.com/repos/'+cfg.repo+'/contents/'+path,Object.assign({},opt,{headers:{
+  const r=await fetch('https://api.github.com/repos/'+cfg.repo+'/contents/'+path,Object.assign({cache:'no-store'},opt,{headers:{   // no-store : jamais une liste périmée (après suppression ou enregistrement)
     Authorization:'Bearer '+cfg.token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Content-Type':'application/json'}}));
   if(r.status===404)return null;
   if(!r.ok){let m='';try{m=(await r.json()).message;}catch(e){}
@@ -3557,7 +3557,7 @@ async function ghOpen(cfg,file){
   const j=JSON.parse(b64dec(f.content)),st=j&&j.state?j.state:j;
   if(!st||!st.items)throw new Error('ce fichier n\u2019est pas un plan du studio');
   applyPlan(st);
-  const name=j.name||file.name.replace(/\.json$/i,'');ghCurName=name;
+  const name=j.name||file.name.replace(/\.json$/i,'');setCurPlan(name);
   if(window.onPlanOpened)window.onPlanOpened(name);
   const el=document.getElementById('autosave');if(el)el.textContent='Plan « '+name+' » ouvert.';
   return name;
@@ -3565,13 +3565,16 @@ async function ghOpen(cfg,file){
 const ghDlg=document.createElement('dialog');ghDlg.className='appdlg';document.body.appendChild(ghDlg);
 const ghEsc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function ghShow(html){ghDlg.innerHTML=html;if(!ghDlg.open)ghDlg.showModal();ghDlg.querySelectorAll('[data-a=cancel]').forEach(b=>b.onclick=()=>ghDlg.close());}
-let ghCurName='';   // plan GitHub en cours (ouvert ou enregistré)
-const ghPlanName=()=>(window.currentPlanName&&window.currentPlanName())||ghCurName;
+// plan GitHub en cours (dernier créé, enregistré ou ouvert) : gardé d'une séance à l'autre pour « Enregistrer »
+const LAST_PLAN_KEY='studio3d-lastplan';
+let ghCurName='';try{ghCurName=localStorage.getItem(LAST_PLAN_KEY)||'';}catch(e){}
+function setCurPlan(name){ghCurName=name||'';try{name?localStorage.setItem(LAST_PLAN_KEY,name):localStorage.removeItem(LAST_PLAN_KEY);}catch(e){}}
+const ghPlanName=()=>window.currentPlanName?window.currentPlanName():ghCurName;   // application : le plan affiché dans le titre fait foi
 async function githubSaveQuick(){   // Ctrl+S : enregistre le plan en cours sur GitHub sous son nom, sinon ouvre la fenêtre
   const cfg=await ghStore.get(),name=ghPlanName();
   if(!cfg||!cfg.repo||!cfg.token||!name){githubDialog('save');return;}
   const el=document.getElementById('autosave');
-  try{if(el)el.textContent='Enregistrement du plan « '+name+' »…';await ghSave(cfg,name);ghCurName=name;if(window.onPlanOpened)window.onPlanOpened(name);
+  try{if(el)el.textContent='Enregistrement du plan « '+name+' »…';await ghSave(cfg,name);setCurPlan(name);if(window.onPlanOpened)window.onPlanOpened(name);
     if(el)el.textContent='Plan « '+name+' » enregistré.';}
   catch(e){if(el)el.textContent='Enregistrement impossible : '+(e&&e.message||e);githubDialog('save');}
 }
@@ -3579,14 +3582,14 @@ async function ghDelete(cfg,file){
   await ghCall(cfg,'plans/'+encodeURIComponent(file.name),{method:'DELETE',body:JSON.stringify({message:'Suppression du plan « '+file.name.replace(/\.json$/i,'')+' »',sha:file.sha})});
 }
 // fenêtre « Ouvrir » (liste des plans, ouvrir ou supprimer) ou « Enregistrer sous » (nom du plan)
-async function githubDialog(mode){
+async function githubDialog(mode,known){   // known : liste déjà connue (après une suppression)
   mode=mode==='save'?'save':'open';
   const cfg=await ghStore.get();
   if(!cfg||!cfg.repo||!cfg.token){ghSetup(null,'',mode);return;}
   const title=mode==='save'?'Enregistrer le plan sous':'Ouvrir un plan';
   ghShow('<h3>'+title+'</h3><p>Lecture des plans…</p><div class="dlgbtns"><button class="ghost" data-a="cancel">Fermer</button></div>');
   let files;
-  try{files=await ghList(cfg);}catch(e){ghSetup(cfg,'Connexion impossible : '+e.message,mode);return;}
+  try{files=known||await ghList(cfg);}catch(e){ghSetup(cfg,'Connexion impossible : '+e.message,mode);return;}
   if(!ghDlg.open)return;
   const foot='<p class="note" style="margin:10px 0 0">Plans enregistrés dans ton dépôt GitHub privé '+ghEsc(cfg.repo)+'.</p>'+
     '<div class="dlgbtns"><button class="ghost left" data-a="setup">Changer de dépôt ou de jeton</button><button class="ghost" data-a="cancel">Fermer</button></div>';
@@ -3607,7 +3610,7 @@ async function githubDialog(mode){
       const name=inp.value.trim();if(!name){inp.focus();return;}
       if(files.some(f=>f.name===ghFileName(name))&&confirmFor!==name){confirmFor=name;warn.hidden=false;warn.textContent='Un plan « '+name+' » existe déjà : clique encore sur « Remplacer » pour l’écraser.';sv.textContent='Remplacer';return;}
       sv.disabled=true;sv.textContent='Enregistrement…';
-      try{await ghSave(cfg,name);ghCurName=name;ghDlg.close();if(window.onPlanOpened)window.onPlanOpened(name);note('Plan « '+name+' » enregistré.');}
+      try{await ghSave(cfg,name);setCurPlan(name);ghDlg.close();if(window.onPlanOpened)window.onPlanOpened(name);note('Plan « '+name+' » enregistré.');}
       catch(e){warn.hidden=false;warn.textContent='Problème : '+(e&&e.message||e);sv.disabled=false;sv.textContent='Enregistrer';}
     };
   }else{
@@ -3627,7 +3630,12 @@ async function githubDialog(mode){
         b.dataset.c='1';b.textContent='Confirmer';warn.hidden=false;warn.textContent='Supprimer définitivement le plan « '+name+' » ? Clique sur « Confirmer ».';return;
       }
       b.disabled=true;b.textContent='…';
-      try{await ghDelete(cfg,f);if(ghCurName===name)ghCurName='';note('Plan « '+name+' » supprimé.');githubDialog('open');}
+      try{
+        await ghDelete(cfg,f);
+        if(ghPlanName()===name){setCurPlan('');if(window.onPlanOpened)window.onPlanOpened('');}   // plus de plan courant : « Enregistrer » redemandera un nom
+        note('Plan « '+name+' » supprimé.');
+        githubDialog('open',files.filter(x=>x!==f));   // retiré de la liste tout de suite
+      }
       catch(e){b.disabled=false;b.textContent='Supprimer';fail(e);}
     });
   }
@@ -3704,7 +3712,7 @@ if(desktop){
   const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   function showDlg(html){dlg.innerHTML=html;if(!dlg.open)dlg.showModal();}
   function closeDlg(){if(dlg.open)dlg.close();}
-  function newPlan(){applyPlan(DEFAULT_STATE);curPath=null;curName='';dirty=false;syncTitle();showMsg('Nouveau plan (agencement d\u2019origine).');}
+  function newPlan(){applyPlan(DEFAULT_STATE);setCurPlan('');curPath=null;curName='';dirty=false;syncTitle();showMsg('Nouveau plan (agencement d\u2019origine).');}
   function newDialog(){
     if(!dirty){newPlan();return;}
     showDlg('<h3>Nouveau plan</h3><p>Repartir de l\u2019agencement d\u2019origine ? Les modifications'+(curName?' du plan « '+esc(curName)+' »':'')+' qui n\u2019ont pas été enregistrées dans un fichier seront perdues.</p>'+
@@ -3772,6 +3780,7 @@ if(desktop){
   // plan ouvert ou enregistré sur GitHub : il devient le plan courant (sans fichier sur le PC)
   window.onPlanOpened=name=>{curPath=null;curName=name;dirty=false;syncTitle();};
   window.currentPlanName=()=>curName;
+  if(!curName&&ghCurName){curName=ghCurName;syncTitle();}   // dernier plan de la séance précédente
   function loadPlanJson(text,path){
     const j=JSON.parse(text);const st=j&&j.state?j.state:j;
     if(!st||!st.items)throw new Error('format');
