@@ -3267,33 +3267,40 @@ document.querySelectorAll('[data-show]').forEach(b=>b.addEventListener('click',(
 }));
 /* ---------- Plan électrique 2D (vue de dessus, éditable, imprimable) ---------- */
 const ELEC_TYPES={
-  socket:{n:'Prise 2P+T 16 A',h:0.30,c:'prises'},
-  socket20:{n:'Prise 20 A (plan de travail, spécialisée)',h:1.10,c:'cuisine'},
-  switch:{n:'Interrupteur',h:1.05,c:'eclairage'},
-  switch2:{n:'Va-et-vient',h:1.05,c:'eclairage'},
-  light:{n:'Point lumineux (plafond)',h:2.50,c:'eclairage'},
-  spot:{n:'Spot encastré',h:2.50,c:'eclairage'},
-  wall:{n:'Applique murale',h:1.80,c:'eclairage'},
-  app:{n:'Appareil (alimentation dédiée)',h:0.50,c:null},
-  panel:{n:'Tableau électrique',h:1.60,c:null}
+  socket:{n:'Prise 2P+T 16 A',h:0.30},
+  socket20:{n:'Prise 20 A (plan de travail, spécialisée)',h:1.10},
+  light:{n:'Point lumineux (plafond)',h:2.50},
+  spot:{n:'Spot encastré',h:2.50},
+  wall:{n:'Applique murale',h:1.80},
+  app:{n:'Appareil (alimentation dédiée)',h:0.50},
+  rj45:{n:'Prise RJ45 / TV',h:0.30},
 };
-const ELEC_CIRCUITS0=()=>[
-  {id:'eclairage',name:'Éclairage',color:'#d98a00',breaker:'10 A',section:'1,5 mm²'},
-  {id:'prises',name:'Prises 16 A',color:'#2f6f9f',breaker:'16 A',section:'1,5 mm²'},
-  {id:'cuisine',name:'Prises cuisine 20 A',color:'#7b4fb0',breaker:'20 A',section:'2,5 mm²'},
-  {id:'lavelinge',name:'Lave-linge',color:'#1f9d6b',breaker:'20 A',section:'2,5 mm²'},
-  {id:'clim',name:'Climatiseur',color:'#c0392b',breaker:'20 A',section:'2,5 mm²'},
-  {id:'chauffage',name:'Cheminée électrique',color:'#8a5a2b',breaker:'16 A',section:'2,5 mm²'}
-];
-const elec={circuits:ELEC_CIRCUITS0(),pts:[],cables:[]};
+// Équipements dessinés à leur taille réelle sur le plan (largeur w × profondeur d, en m ; h = hauteur de l'alimentation)
+const ELEC_EQUIP={
+  cumulus:{n:'Cumulus (chauffe-eau)',w:0.20,d:0.20,h:1.80,round:1},
+  plaque:{n:'Plaque de cuisson',w:0.20,d:0.20,h:0.90},
+  four:{n:'Four',w:0.20,d:0.20,h:0.90},
+  hotte:{n:'Hotte',w:0.20,d:0.20,h:1.90},
+  frigo:{n:'Réfrigérateur',w:0.20,d:0.20,h:0.30},
+  lvaisselle:{n:'Lave-vaisselle',w:0.20,d:0.20,h:0.30},
+  micro:{n:'Micro-ondes',w:0.20,d:0.20,h:1.20},
+  radiateur:{n:'Radiateur / sèche-serviettes',w:0.30,d:0.10,h:0.30},
+  vmc:{n:'VMC / extracteur',w:0.20,d:0.20,h:2.30,round:1},
+  box:{n:'Box internet / baie',w:0.20,d:0.20,h:1.20},
+  tv:{n:'Télévision',w:0.30,d:0.08,h:0.90},
+  libre:{n:'Élément libre',w:0.20,d:0.20,h:0.50}
+};
+const elec={pts:[]};
 let elecUid=1;
 const elecId=()=>'e'+(elecUid++)+Math.random().toString(36).slice(2,5);
 function elecLoad(s){
-  elec.circuits=ELEC_CIRCUITS0();elec.pts=[];elec.cables=[];
+  elec.pts=[];
   if(s&&typeof s==='object'){
-    if(Array.isArray(s.circuits)&&s.circuits.length)elec.circuits=s.circuits.map(c=>({id:String(c.id),name:String(c.name||''),color:/^#[0-9a-f]{6}$/i.test(c.color)?c.color:'#555555',breaker:String(c.breaker||''),section:String(c.section||'')}));
-    if(Array.isArray(s.pts))elec.pts=s.pts.filter(p=>ELEC_TYPES[p.t]&&isFinite(p.x)&&isFinite(p.z)).map(p=>({id:String(p.id||elecId()),t:p.t,x:+p.x,z:+p.z,h:isFinite(p.h)?+p.h:ELEC_TYPES[p.t].h,c:p.c||null,n:String(p.n||'')}));
-    if(Array.isArray(s.cables))elec.cables=s.cables.filter(k=>Array.isArray(k.p)&&k.p.length>1).map(k=>({id:String(k.id||elecId()),c:k.c||null,p:k.p.map(q=>[+q[0],+q[1]])}));
+    if(Array.isArray(s.pts))elec.pts=s.pts.filter(p=>(ELEC_TYPES[p.t]||p.t==='equip')&&isFinite(p.x)&&isFinite(p.z)).map(p=>{
+      const o={id:String(p.id||elecId()),t:p.t,x:+p.x,z:+p.z,h:isFinite(p.h)?+p.h:(ELEC_TYPES[p.t]?ELEC_TYPES[p.t].h:0.5),n:String(p.n||'')};
+      if(p.t==='equip'){o.k=String(p.k||'libre');o.w=isFinite(p.w)&&p.w>0?+p.w:0.5;o.d=isFinite(p.d)&&p.d>0?+p.d:0.5;o.r=isFinite(p.r)?+p.r:0;if(p.round)o.round=1;}
+      return o;
+    });
   }
   if(typeof elecRender==='function')elecRender();
 }
@@ -3301,7 +3308,7 @@ function elecSave(){try{save();}catch(e){}}
 
 (function(){
 const NS='http://www.w3.org/2000/svg';
-const st={tool:'select',circ:'prises',sel:null,drawing:null,view:null,snap:true,items:true};
+const st={tool:'select',sel:null,view:null,snap:true,items:true};
 const ce=(tag,attrs,parent,txt)=>{const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(txt!=null)e.textContent=txt;if(parent)parent.appendChild(e);return e;};
 const he=(tag,attrs,parent,txt)=>{const e=document.createElement(tag);for(const k in attrs){if(k==='class')e.className=attrs[k];else e.setAttribute(k,attrs[k]);}if(txt!=null)e.textContent=txt;if(parent)parent.appendChild(e);return e;};
 const fm=v=>String(Math.round(v*100)/100).replace('.',',');
@@ -3358,7 +3365,7 @@ const snapB=mk('Aimantation 5 cm : oui',()=>{st.snap=!st.snap;snapB.textContent=
 const itemsB=mk('Meubles : affichés',()=>{st.items=!st.items;itemsB.textContent='Meubles : '+(st.items?'affichés':'masqués');render();});
 mk('Recentrer',()=>{fit();});
 mk('Imprimer / PDF',()=>doPrint(),'pri');
-mk('Tout effacer',()=>{if(!elec.pts.length&&!elec.cables.length)return;if(confirm('Effacer tous les points et câbles du plan électrique ?')){elec.pts=[];elec.cables=[];st.sel=null;render();elecSave();}});
+mk('Tout effacer',()=>{if(!elec.pts.length)return;if(confirm('Effacer tous les éléments du plan électrique ?')){elec.pts=[];st.sel=null;render();elecSave();}});
 const sp=he('span',{style:'flex:1'},head);
 mk('Fermer (Échap)',()=>close());
 const body=he('div',{class:'eb'},ov);
@@ -3374,19 +3381,18 @@ function symbol(t,g,col){
   const s='#111',w=0.012;
   if(t==='socket'){ce('circle',{r:.075,fill:'#fff',stroke:col,'stroke-width':w*1.4},g);ce('path',{d:'M-.075 0H.075M0 -.075V0',stroke:col,'stroke-width':w*1.4,fill:'none'},g);ce('path',{d:'M-.075 .075H.075',stroke:col,'stroke-width':w*2},g);}
   else if(t==='socket20'){ce('circle',{r:.085,fill:col,stroke:'#111','stroke-width':w},g);ce('text',{y:.03,'text-anchor':'middle','font-size':.085,fill:'#fff','font-weight':700},g,'20');}
-  else if(t==='switch'||t==='switch2'){ce('circle',{r:.05,fill:'#fff',stroke:col,'stroke-width':w*1.4},g);ce('path',{d:'M.035 -.035L.13 -.13',stroke:col,'stroke-width':w*1.4},g);if(t==='switch2')ce('path',{d:'M.08 -.04L.17 -.13',stroke:col,'stroke-width':w*1.4},g);}
   else if(t==='light'){ce('circle',{r:.1,fill:'#fff',stroke:col,'stroke-width':w*1.4},g);ce('path',{d:'M-.07 -.07L.07 .07M.07 -.07L-.07 .07',stroke:col,'stroke-width':w*1.4},g);}
   else if(t==='spot'){ce('circle',{r:.065,fill:'#fff',stroke:col,'stroke-width':w*1.4},g);ce('circle',{r:.025,fill:col},g);}
   else if(t==='wall'){ce('path',{d:'M-.08 0A.08 .08 0 0 1 .08 0Z',fill:'#fff',stroke:col,'stroke-width':w*1.4},g);ce('path',{d:'M-.1 0H.1',stroke:col,'stroke-width':w*2},g);}
   else if(t==='app'){ce('rect',{x:-.1,y:-.1,width:.2,height:.2,rx:.02,fill:'#fff',stroke:col,'stroke-width':w*1.6},g);ce('path',{d:'M.02 -.08L-.05 .01H0L-.02 .08L.05 -.02H0Z',fill:col},g);}
-  else if(t==='panel'){ce('rect',{x:-.17,y:-.1,width:.34,height:.2,fill:'#111'},g);ce('text',{y:.035,'text-anchor':'middle','font-size':.09,fill:'#fff','font-weight':700},g,'TD');}
+  else if(t==='rj45'){ce('rect',{x:-.07,y:-.07,width:.14,height:.14,fill:'#fff',stroke:col,'stroke-width':w*1.4},g);ce('text',{y:.03,'text-anchor':'middle','font-size':.07,fill:col,'font-weight':700},g,'RJ');}
 }
 function iconSvg(t,parent){
   const sv=document.createElementNS(NS,'svg');sv.setAttribute('viewBox','-.2 -.2 .4 .4');parent.appendChild(sv);
   symbol(t,ce('g',{},sv),'#2f6f73');return sv;
 }
-const circ=id=>elec.circuits.find(c=>c.id===id);
-const colOf=p=>{const c=circ(p.c);return c?c.color:'#555';};
+const KCOL={socket:'#2f6f9f',socket20:'#2f6f9f',rj45:'#2f6f9f',light:'#d98a00',spot:'#d98a00',wall:'#d98a00',app:'#1f9d6b',equip:'#1f9d6b'};   // prises en bleu, luminaires en orange, appareils en vert
+const colOf=p=>KCOL[p.t]||'#555';
 
 /* ---- décor : murs, ouvertures, meubles (en mètres ; x vers la droite, z vers le bas) ---- */
 function drawBackground(g,opts){
@@ -3454,26 +3460,31 @@ function render(){renderPlan();renderTools();renderSide();}
 function renderPlan(){
   while(gMain.firstChild)gMain.removeChild(gMain.firstChild);
   drawBackground(gMain,{items:st.items});
-  const gC=ce('g',{},gMain),gP=ce('g',{},gMain);
-  elec.cables.forEach(k=>{
-    const col=(circ(k.c)||{color:'#555'}).color;
-    const d='M'+k.p.map(q=>q[0]+' '+q[1]).join('L');
-    ce('path',{d,fill:'none',stroke:col,'stroke-width':0.022,'stroke-linejoin':'round','stroke-linecap':'round','stroke-dasharray':st.sel===k.id?'0.05 0.03':''},gC);
-    const hit=ce('path',{d,fill:'none',stroke:'transparent','stroke-width':0.14,'data-k':k.id,style:'cursor:pointer'},gC);
-  });
-  if(st.drawing){
-    const k=st.drawing,col=(circ(k.c)||{color:'#555'}).color;
-    ce('path',{d:'M'+k.p.concat(k.cur?[k.cur]:[]).map(q=>q[0]+' '+q[1]).join('L'),fill:'none',stroke:col,'stroke-width':0.022,'stroke-dasharray':'0.05 0.04'},gC);
-  }
+  const gP=ce('g',{},gMain);
   elec.pts.forEach(p=>{
     const col=colOf(p);
+    if(p.t==='equip'){
+      const g=ce('g',{transform:`translate(${p.x} ${p.z}) rotate(${p.r||0})`,'data-p':p.id,style:'cursor:'+(st.tool==='select'?'move':'default')},gP);
+      const eq=ELEC_EQUIP[p.k]||{};
+      const rd=eq.round||p.round;
+      const sh=rd?'ellipse':'rect';
+      const geo=rd?{rx:p.w/2,ry:p.d/2}:{x:-p.w/2,y:-p.d/2,width:p.w,height:p.d,rx:0.015};
+      if(st.sel===p.id)ce(sh,Object.assign({},geo,{fill:'none',stroke:'#2f6f73','stroke-width':.05,opacity:.35}),g);
+      ce(sh,Object.assign({},geo,{fill:col,'fill-opacity':.14,stroke:col,'stroke-width':.016}),g);
+      if(Math.min(p.w,p.d)>=0.15)ce('path',{d:'M.03 -.09L-.04 .01H.01L-.01 .09L.06 -.02H.01Z',fill:col,transform:`scale(${Math.min(1,Math.min(p.w,p.d)/0.2)})`},g);
+      const gl=ce('g',{transform:`translate(${p.x} ${p.z})`,'pointer-events':'none'},gP);
+      const nm=p.n||eq.n||'Équipement',fs=0.06;
+      const vert=p.d>p.w*2.2&&(((p.r||0)%180)===0);   // équipement très allongé : le texte reste lisible
+      [nm].forEach((tx,i)=>ce('text',{x:0,y:Math.max(p.w,p.d)/2+fs*1.1,'font-size':i?fs*0.85:fs,'text-anchor':'middle',fill:'#111',stroke:'#fff','stroke-width':.02,'paint-order':'stroke'},gl,tx));
+      return;
+    }
     const g=ce('g',{transform:`translate(${p.x} ${p.z})`,'data-p':p.id,style:'cursor:'+(st.tool==='select'?'move':'default')},gP);
     if(st.sel===p.id)ce('circle',{r:.2,fill:'#2f6f7322',stroke:'#2f6f73','stroke-width':.012,'stroke-dasharray':'.04 .03'},g);
     ce('circle',{r:.2,fill:'transparent'},g);
     symbol(p.t,g,col);
     const lines=[];
     if(p.n)lines.push(p.n);
-    if(p.t!=='light'&&p.t!=='spot'||p.n)lines.push('h '+Math.round(p.h*100)+' cm');
+    if(p.t!=='app'&&((p.t!=='light'&&p.t!=='spot')||p.n))lines.push('h '+Math.round(p.h*100)+' cm');
     lines.forEach((tx,i)=>{const t=ce('text',{x:0,y:.2+i*.075,'font-size':.065,'text-anchor':'middle',fill:'#111',stroke:'#fff','stroke-width':.02,'paint-order':'stroke'},g,tx);t.setAttribute('pointer-events','none');});
   });
 }
@@ -3484,67 +3495,50 @@ function renderTools(){
     if(icon)iconSvg(icon,b);
     b.appendChild(document.createTextNode(label));
     b.addEventListener('click',()=>{
-      st.tool=key;st.drawing=null;
-      if(ELEC_TYPES[key]){st.sel=null;const dc=ELEC_TYPES[key].c;if(dc&&circ(dc))st.circ=dc;}   // le circuit habituel de ce type devient le circuit actif
+      st.tool=key;
+      if(ELEC_TYPES[key])st.sel=null;
+      if(key.indexOf('eq:')===0)st.sel=null;
       render();
     });
     return b;
   };
   he('h3',{},tools,'Outils');
   add('select','Sélectionner / déplacer');
-  add('cable','Tirer un câble');
   add('erase','Gommer');
   he('h3',{},tools,'Poser');
   Object.keys(ELEC_TYPES).forEach(k=>add(k,ELEC_TYPES[k].n,k));
-  he('p',{class:'hint'},tools,st.tool==='cable'?'Clique pour poser les angles du câble, double-clic ou Entrée pour finir, Échap pour annuler. Maj = tracé à angle droit.':st.tool==='select'?'Glisse un point pour le déplacer, Suppr pour l’enlever. Molette : zoom, glisser le fond : déplacer la vue.':'Clique sur le plan pour poser. Le circuit actif est celui coché à droite.');
+  he('h3',{},tools,'Équipements');
+  Object.keys(ELEC_EQUIP).forEach(k=>add('eq:'+k,k==='libre'?'+ Élément libre (nom, forme, taille)':ELEC_EQUIP[k].n));
+  he('p',{class:'hint'},tools,st.tool==='select'?'Glisse un élément pour le déplacer, Suppr pour l\u2019enlever. Molette : zoom, glisser le fond : déplacer la vue.':'Clique sur le plan pour poser.');
 }
 function renderSide(){
   side.textContent='';
   const sel=elec.pts.find(p=>p.id===st.sel);
-  const selK=elec.cables.find(k=>k.id===st.sel);
   if(sel){
     he('h3',{},side,'Élément sélectionné');
-    he('div',{},side,ELEC_TYPES[sel.t].n);
+    he('div',{},side,(ELEC_TYPES[sel.t]||{n:'Équipement'}).n);
+    if(sel.t==='equip'){
+      const row=he('div',{style:'display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px'},side);
+      const fld=(lab,val,min,max,set)=>{const w=he('div',{},row);he('label',{class:'l'},w,lab);const i=he('input',{type:'number',min,max,step:5,value:val},w);i.addEventListener('input',()=>{if(i.value!==''){set(+i.value);elecSave();renderKeep();}});};
+      fld('Largeur cm',Math.round(sel.w*100),2,500,v=>sel.w=Math.max(0.02,v/100));
+      fld('Profond. cm',Math.round(sel.d*100),2,500,v=>sel.d=Math.max(0.02,v/100));
+      fld('Angle °',Math.round(sel.r||0),0,359,v=>sel.r=((v%360)+360)%360);
+      if(sel.k==='libre'){
+        const lab=he('label',{class:'l',style:'display:flex;gap:6px;align-items:center'},side);
+        const cb=he('input',{type:'checkbox',style:'width:auto'},lab);cb.checked=!!sel.round;lab.appendChild(document.createTextNode('Forme ronde'));
+        cb.addEventListener('change',()=>{if(cb.checked)sel.round=1;else delete sel.round;render();elecSave();});
+      }
+      const rb=he('button',{class:'hb',type:'button',style:'margin-top:6px'},side,'Pivoter de 90° (touche R)');
+      rb.addEventListener('click',()=>{sel.r=((sel.r||0)+90)%360;render();elecSave();});
+    }
     he('label',{class:'l'},side,'Repère / nom (ex. lave-linge)');
     const n=he('input',{type:'text',value:sel.n,maxlength:30},side);n.addEventListener('input',()=>{sel.n=n.value;elecSave();rerenderKeep(n);});
+    if(st.focusName){st.focusName=false;setTimeout(()=>{n.focus();n.select();},0);}
     he('label',{class:'l'},side,'Hauteur de pose (cm, au sol)');
     const h=he('input',{type:'number',min:0,max:294,step:5,value:Math.round(sel.h*100)},side);h.addEventListener('input',()=>{if(h.value!==''){sel.h=Math.max(0,Math.min(2.94,+h.value/100));elecSave();rerenderKeep(h);}});
-    if(sel.t!=='panel'){
-      he('label',{class:'l'},side,'Circuit');
-      circSelect(sel);
-    }
     const del=he('button',{class:'hb',type:'button',style:'margin-top:8px'},side,'Supprimer');del.addEventListener('click',()=>{elec.pts=elec.pts.filter(p=>p!==sel);st.sel=null;render();elecSave();});
-  }else if(selK){
-    he('h3',{},side,'Câble sélectionné');
-    he('label',{class:'l'},side,'Circuit');circSelect(selK);
-    const L=selK.p.reduce((a,q,i)=>i?a+Math.hypot(q[0]-selK.p[i-1][0],q[1]-selK.p[i-1][1]):0,0);
-    he('div',{class:'hint'},side,'Longueur tracée : '+fm(L)+' m (hors descentes verticales)');
-    const del=he('button',{class:'hb',type:'button'},side,'Supprimer');del.addEventListener('click',()=>{elec.cables=elec.cables.filter(k=>k!==selK);st.sel=null;render();elecSave();});
   }
-  he('h3',{},side,'Circuits');
-  he('div',{class:'hint'},side,'Le circuit coché est utilisé pour ce que tu poses ou tires.');
-  elec.circuits.forEach(c=>{
-    const row=he('div',{class:'crow'+(st.circ===c.id?' act':'')},side);
-    const col=he('input',{type:'color',value:c.color,'aria-label':'Couleur'},row);col.addEventListener('input',()=>{c.color=col.value;elecSave();renderKeep();});
-    const nm=he('input',{type:'text',value:c.name,maxlength:30,'aria-label':'Nom du circuit'},row);nm.addEventListener('input',()=>{c.name=nm.value;elecSave();});
-    nm.addEventListener('focus',()=>{if(st.circ!==c.id){st.circ=c.id;}});
-    const f=he('div',{class:'f'},row);
-    const br=he('input',{type:'text',value:c.breaker,placeholder:'Disjoncteur',maxlength:12,'aria-label':'Disjoncteur'},f);br.addEventListener('input',()=>{c.breaker=br.value;elecSave();});
-    const se=he('input',{type:'text',value:c.section,placeholder:'Section',maxlength:12,'aria-label':'Section'},f);se.addEventListener('input',()=>{c.section=se.value;elecSave();});
-    const pick=he('button',{class:'hb',type:'button',style:'grid-column:1/3;padding:3px 8px'},row,st.circ===c.id?'Circuit actif':'Utiliser ce circuit');
-    pick.addEventListener('click',()=>{st.circ=c.id;render();});
-    const cnt=elec.pts.filter(p=>p.c===c.id).length;
-    if(!cnt&&!elec.cables.some(k=>k.c===c.id)&&elec.circuits.length>1){const x=he('button',{class:'hb',type:'button',style:'grid-column:1/3;padding:3px 8px'},row,'Supprimer ce circuit');x.addEventListener('click',()=>{elec.circuits=elec.circuits.filter(z=>z!==c);if(st.circ===c.id)st.circ=elec.circuits[0].id;render();elecSave();});}
-  });
-  const nb=he('button',{class:'hb',type:'button'},side,'+ Ajouter un circuit');
-  nb.addEventListener('click',()=>{const id='c'+elecId();const pal=['#e67e22','#16a085','#8e44ad','#2c3e50','#d35400','#27ae60'];elec.circuits.push({id,name:'Nouveau circuit',color:pal[elec.circuits.length%pal.length],breaker:'16 A',section:'1,5 mm²'});st.circ=id;render();elecSave();});
   he('p',{class:'hint'},side,'Plan d’implantation indicatif, à faire valider par un électricien (règles NF C 15-100 : nombre de prises par pièce, protections différentielles, sections).');
-}
-function circSelect(obj){
-  const s=he('select',{},side);
-  const o0=he('option',{value:''},s,'(aucun)');
-  elec.circuits.forEach(c=>{const o=he('option',{value:c.id},s,c.name);if(obj.c===c.id)o.selected=true;});
-  s.addEventListener('change',()=>{obj.c=s.value||null;render();elecSave();});
 }
 function rerenderKeep(){renderPlan();}   // redessine le plan sans reconstruire le panneau (garde le focus)
 function renderKeep(){renderPlan();}
@@ -3565,41 +3559,30 @@ svg.addEventListener('wheel',e=>{e.preventDefault();if(!st.view)return;const [x,
 
 /* ---- interactions ---- */
 let drag=null;
-function snapPoint(x,z){ // aimante aux points existants / extrémités de câbles
-  let best=null,bd=0.12;
-  elec.pts.forEach(p=>{const d=Math.hypot(p.x-x,p.z-z);if(d<bd){bd=d;best=[p.x,p.z];}});
-  elec.cables.forEach(k=>k.p.forEach(q=>{const d=Math.hypot(q[0]-x,q[1]-z);if(d<bd){bd=d;best=[q[0],q[1]];}}));
-  return best||[sn(x),sn(z)];
-}
 svg.addEventListener('pointerdown',e=>{
   if(e.button===2)return;
   const [x,z]=pt(e);
   const tp=e.target.closest&&e.target.closest('[data-p]');
-  const tk=e.target.closest&&e.target.closest('[data-k]');
-  if(e.button===1||(st.tool==='select'&&!tp&&!tk)){ // déplacer la vue
-    if(st.tool==='select'&&!tp&&!tk){st.sel=null;}
+  if(e.button===1||(st.tool==='select'&&!tp)){ // déplacer la vue
+    if(st.tool==='select'&&!tp){st.sel=null;}
     drag={mode:'pan',sx:e.clientX,sy:e.clientY,v:Object.assign({},st.view),moved:false};svg.setPointerCapture(e.pointerId);return;
   }
   if(st.tool==='select'){
     if(tp){const p=elec.pts.find(q=>q.id===tp.dataset.p);st.sel=p.id;drag={mode:'pt',p,dx:p.x-x,dz:p.z-z,moved:false};svg.setPointerCapture(e.pointerId);render();}
-    else if(tk){st.sel=tk.dataset.k;render();}
     return;
   }
   if(st.tool==='erase'){
     if(tp){elec.pts=elec.pts.filter(q=>q.id!==tp.dataset.p);render();elecSave();}
-    else if(tk){elec.cables=elec.cables.filter(q=>q.id!==tk.dataset.k);render();elecSave();}
     return;
   }
-  if(st.tool==='cable'){
-    let [sx,sz]=snapPoint(x,z);
-    if(st.drawing&&e.shiftKey){const l=st.drawing.p[st.drawing.p.length-1];if(Math.abs(sx-l[0])>Math.abs(sz-l[1]))sz=l[1];else sx=l[0];}
-    if(!st.drawing)st.drawing={c:st.circ,p:[[sx,sz]],cur:null};
-    else{const l=st.drawing.p[st.drawing.p.length-1];if(Math.hypot(l[0]-sx,l[1]-sz)>0.01)st.drawing.p.push([sx,sz]);}
-    render();return;
+  if(st.tool.indexOf('eq:')===0){
+    const q=ELEC_EQUIP[st.tool.slice(3)];
+    const p={id:elecId(),t:'equip',k:st.tool.slice(3),x:sn(x),z:sn(z),w:q.w,d:q.d,r:0,h:q.h,n:q.n};
+    elec.pts.push(p);st.sel=p.id;if(p.k==='libre')st.focusName=true;render();elecSave();return;
   }
   if(ELEC_TYPES[st.tool]){
     const T0=ELEC_TYPES[st.tool];
-    const p={id:elecId(),t:st.tool,x:sn(x),z:sn(z),h:T0.h,c:st.tool==='panel'?null:st.circ,n:''};
+    const p={id:elecId(),t:st.tool,x:sn(x),z:sn(z),h:T0.h,n:''};
     elec.pts.push(p);st.sel=p.id;render();elecSave();
   }
 });
@@ -3609,21 +3592,10 @@ svg.addEventListener('pointermove',e=>{
     else if(drag.mode==='pt'){const [x,z]=pt(e);drag.p.x=sn(x+drag.dx);drag.p.z=sn(z+drag.dz);drag.moved=true;render();}
     return;
   }
-  if(st.tool==='cable'&&st.drawing){
-    const [x,z]=pt(e);let [sx,sz]=snapPoint(x,z);
-    if(e.shiftKey){const l=st.drawing.p[st.drawing.p.length-1];if(Math.abs(sx-l[0])>Math.abs(sz-l[1]))sz=l[1];else sx=l[0];}
-    st.drawing.cur=[sx,sz];render();
-  }
 });
 const endDrag=()=>{if(drag){if(drag.mode==='pt'&&drag.moved)elecSave();drag=null;renderSide();}};
 svg.addEventListener('pointerup',endDrag);svg.addEventListener('pointercancel',endDrag);
-function finishCable(){
-  const k=st.drawing;st.drawing=null;
-  if(k&&k.p.length>1){elec.cables.push({id:elecId(),c:k.c,p:k.p});elecSave();}
-  render();
-}
-svg.addEventListener('dblclick',e=>{if(st.tool==='cable'&&st.drawing){if(st.drawing.p.length>2)st.drawing.p.pop();finishCable();}});
-svg.addEventListener('contextmenu',e=>{e.preventDefault();if(st.drawing)finishCable();});
+svg.addEventListener('contextmenu',e=>e.preventDefault());
 
 /* ---- appareils du studio ---- */
 function autoApps(){
@@ -3631,7 +3603,7 @@ function autoApps(){
   let n=0;
   defs.forEach(([id,name,h,c])=>{
     const it=items.find(i=>i.id===id);if(!it||removed.has(id)||elec.pts.some(p=>p.t==='app'&&p.n===name))return;
-    elec.pts.push({id:elecId(),t:'app',x:Math.round(it.obj.position.x*100)/100,z:Math.round(it.obj.position.z*100)/100,h,c:circ(c)?c:st.circ,n:name});n++;
+    elec.pts.push({id:elecId(),t:'app',x:Math.round(it.obj.position.x*100)/100,z:Math.round(it.obj.position.z*100)/100,h,n:name});n++;
   });
   if(n===0)alert('Les appareils sont déjà sur le plan.');
   render();elecSave();
@@ -3639,6 +3611,7 @@ function autoApps(){
 
 /* ---- impression ---- */
 function doPrint(){
+  st.sel=null;render();   // pas de sélection sur la feuille imprimée
   buildSheet();
   document.body.classList.add('elec-print');
   const done=()=>{document.body.classList.remove('elec-print');window.removeEventListener('afterprint',done);};
@@ -3652,41 +3625,39 @@ function buildSheet(){
   const s2=ce('svg',{viewBox:`${st.view?KX1-KFT-0.3:-3} ${-0.5} ${W+T+0.6-(KX1-KFT-0.3)} ${SBZ1+KT+0.2+0.5}`,preserveAspectRatio:'xMidYMid meet'});
   sheet.appendChild(s2);
   // copie du plan courant
-  const cl=gMain.cloneNode(true);cl.querySelectorAll('[data-p],[data-k]').forEach(n=>n.removeAttribute('style'));
+  const cl=gMain.cloneNode(true);cl.querySelectorAll('[data-p]').forEach(n=>n.removeAttribute('style'));
   cl.querySelectorAll('circle[stroke-dasharray],path[stroke-dasharray=".05 .03"]').forEach(n=>{if(n.getAttribute('fill')==='#2f6f7322')n.remove();});
   s2.appendChild(cl);
   const cols=he('div',{class:'cols'},sheet);
-  const left=he('div',{},cols),right=he('div',{},cols);
-  const t1=he('table',{},left);
-  const hr=he('tr',{},t1);['Circuit','Protection','Section','Points','Câbles (m)'].forEach(x=>he('th',{},hr,x));
-  elec.circuits.forEach(c=>{
-    const r=he('tr',{},t1);
-    const td=he('td',{},r);const sw=he('span',{style:`display:inline-block;width:10px;height:10px;background:${c.color};margin-right:5px;border:1px solid #000`},td);td.appendChild(document.createTextNode(c.name));
-    he('td',{},r,c.breaker);he('td',{},r,c.section);
-    he('td',{},r,String(elec.pts.filter(p=>p.c===c.id).length));
-    const L=elec.cables.filter(k=>k.c===c.id).reduce((a,k)=>a+k.p.reduce((b,q,i)=>i?b+Math.hypot(q[0]-k.p[i-1][0],q[1]-k.p[i-1][1]):0,0),0);
-    he('td',{},r,fm(L));
-  });
-  const t2=he('table',{},right);
+  const left=he('div',{},cols);
+  const t2=he('table',{},left);
   const h2=he('tr',{},t2);['Symbole','Désignation','Qté','Hauteur'].forEach(x=>he('th',{},h2,x));
   Object.keys(ELEC_TYPES).forEach(k=>{
     const ps=elec.pts.filter(p=>p.t===k);if(!ps.length)return;
     const r=he('tr',{},t2);const td=he('td',{style:'width:34px'},r);
     const sv=document.createElementNS(NS,'svg');sv.setAttribute('viewBox','-.2 -.2 .4 .4');sv.setAttribute('style','width:20px;height:20px;border:0;display:inline-block');td.appendChild(sv);symbol(k,ce('g',{},sv),'#000');
     he('td',{},r,ELEC_TYPES[k].n);he('td',{},r,String(ps.length));
-    const hs=[...new Set(ps.map(p=>Math.round(p.h*100)))].sort((a,b)=>a-b);he('td',{},r,hs.join(' / ')+' cm');
+    const hs=[...new Set(ps.map(p=>Math.round(p.h*100)))].sort((a,b)=>a-b);he('td',{},r,k==='app'?'':hs.join(' / ')+' cm');
   });
-  he('p',{},sheet,'Plan d’implantation indicatif, à faire valider par un électricien (NF C 15-100). Les câbles sont tracés en ligne droite entre les points ; les longueurs ne comprennent pas les descentes verticales.');
+  const eqs=elec.pts.filter(p=>p.t==='equip');
+  [...new Set(eqs.map(p=>p.n||'Équipement'))].forEach(nm=>{
+    const ps=eqs.filter(p=>(p.n||'Équipement')===nm);
+    const r=he('tr',{},t2);const td=he('td',{style:'width:34px'},r);
+    const sv=document.createElementNS(NS,'svg');sv.setAttribute('viewBox','-.2 -.2 .4 .4');sv.setAttribute('style','width:20px;height:20px;border:0;display:inline-block');td.appendChild(sv);
+    ce('rect',{x:-.15,y:-.1,width:.3,height:.2,fill:'none',stroke:'#000','stroke-width':.03},sv);
+    he('td',{},r,nm);he('td',{},r,String(ps.length));
+    const hs=[...new Set(ps.map(p=>Math.round(p.h*100)))].sort((a,b)=>a-b);he('td',{},r,'');
+  });
+  he('p',{},sheet,'Plan d’implantation indicatif, à faire valider par un électricien (NF C 15-100).');
 }
 
 /* ---- ouverture / fermeture ---- */
 function open(){
   ov.classList.add('on');
-  if(!elec.circuits.some(c=>c.id===st.circ))st.circ=elec.circuits[0].id;
   render();
   requestAnimationFrame(()=>{fit();});
 }
-function close(){ov.classList.remove('on');st.drawing=null;}
+function close(){ov.classList.remove('on');}
 window.elecRender=function(){if(ov.classList.contains('on'))render();};
 window.addEventListener('resize',()=>{if(ov.classList.contains('on')&&st.view)fit();});
 window.addEventListener('keydown',e=>{
@@ -3695,9 +3666,9 @@ window.addEventListener('keydown',e=>{
   const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
   e.stopImmediatePropagation();
   if(typing){if(e.key==='Escape')document.activeElement.blur();return;}
-  if(e.key==='Escape'){if(st.drawing){st.drawing=null;render();}else close();}
-  else if(e.key==='Enter'&&st.drawing)finishCable();
-  else if((e.key==='Delete'||e.key==='Backspace')&&st.sel){elec.pts=elec.pts.filter(p=>p.id!==st.sel);elec.cables=elec.cables.filter(k=>k.id!==st.sel);st.sel=null;render();elecSave();}
+  if(e.key==='Escape')close();
+  else if((e.key==='r'||e.key==='R')&&st.sel){const q=elec.pts.find(p=>p.id===st.sel);if(q&&q.t==='equip'){q.r=((q.r||0)+(e.shiftKey?15:90))%360;render();elecSave();}}
+  else if((e.key==='Delete'||e.key==='Backspace')&&st.sel){elec.pts=elec.pts.filter(p=>p.id!==st.sel);st.sel=null;render();elecSave();}
 },true);
 
 const btn=he('button',{id:'elecBtn',class:'ib',title:'Plan électrique 2D','aria-label':'Plan électrique 2D'});
