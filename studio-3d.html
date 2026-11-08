@@ -3484,7 +3484,6 @@ function renderPlan(){
     symbol(p.t,g,col);
     const lines=[];
     if(p.n)lines.push(p.n);
-    if(p.t!=='app'&&((p.t!=='light'&&p.t!=='spot')||p.n))lines.push('h '+Math.round(p.h*100)+' cm');
     lines.forEach((tx,i)=>{const t=ce('text',{x:0,y:.2+i*.075,'font-size':.065,'text-anchor':'middle',fill:'#111',stroke:'#fff','stroke-width':.02,'paint-order':'stroke'},g,tx);t.setAttribute('pointer-events','none');});
   });
 }
@@ -3631,13 +3630,12 @@ function buildSheet(){
   const cols=he('div',{class:'cols'},sheet);
   const left=he('div',{},cols);
   const t2=he('table',{},left);
-  const h2=he('tr',{},t2);['Symbole','Désignation','Qté','Hauteur'].forEach(x=>he('th',{},h2,x));
+  const h2=he('tr',{},t2);['Symbole','Désignation','Qté'].forEach(x=>he('th',{},h2,x));
   Object.keys(ELEC_TYPES).forEach(k=>{
     const ps=elec.pts.filter(p=>p.t===k);if(!ps.length)return;
     const r=he('tr',{},t2);const td=he('td',{style:'width:34px'},r);
     const sv=document.createElementNS(NS,'svg');sv.setAttribute('viewBox','-.2 -.2 .4 .4');sv.setAttribute('style','width:20px;height:20px;border:0;display:inline-block');td.appendChild(sv);symbol(k,ce('g',{},sv),'#000');
     he('td',{},r,ELEC_TYPES[k].n);he('td',{},r,String(ps.length));
-    const hs=[...new Set(ps.map(p=>Math.round(p.h*100)))].sort((a,b)=>a-b);he('td',{},r,k==='app'?'':hs.join(' / ')+' cm');
   });
   const eqs=elec.pts.filter(p=>p.t==='equip');
   [...new Set(eqs.map(p=>p.n||'Équipement'))].forEach(nm=>{
@@ -3646,7 +3644,6 @@ function buildSheet(){
     const sv=document.createElementNS(NS,'svg');sv.setAttribute('viewBox','-.2 -.2 .4 .4');sv.setAttribute('style','width:20px;height:20px;border:0;display:inline-block');td.appendChild(sv);
     ce('rect',{x:-.15,y:-.1,width:.3,height:.2,fill:'none',stroke:'#000','stroke-width':.03},sv);
     he('td',{},r,nm);he('td',{},r,String(ps.length));
-    const hs=[...new Set(ps.map(p=>Math.round(p.h*100)))].sort((a,b)=>a-b);he('td',{},r,'');
   });
   he('p',{},sheet,'Plan d’implantation indicatif, à faire valider par un électricien (NF C 15-100).');
 }
