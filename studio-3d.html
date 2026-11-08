@@ -3694,6 +3694,11 @@ function buildSheet(){
   // copie du plan courant
   const cl=gMain.cloneNode(true);cl.querySelectorAll('[data-p]').forEach(n=>n.removeAttribute('style'));
   cl.querySelectorAll('circle[stroke-dasharray],path[stroke-dasharray=".05 .03"]').forEach(n=>{if(n.getAttribute('fill')==='#2f6f7322')n.remove();});
+  // à l’impression le plan est réduit (~26 mm par mètre) : les textes sont agrandis pour rester lisibles
+  const TXT=1.8;
+  cl.querySelectorAll('text').forEach(t=>{const fs=parseFloat(t.getAttribute('font-size'));if(fs)t.setAttribute('font-size',fs*TXT);});
+  cl.querySelectorAll('tspan[dy]').forEach(t=>t.setAttribute('dy',parseFloat(t.getAttribute('dy'))*TXT));
+  cl.querySelectorAll('text[stroke-width]').forEach(t=>t.setAttribute('stroke-width',parseFloat(t.getAttribute('stroke-width'))*TXT));
   s2.appendChild(cl);
 }
 
