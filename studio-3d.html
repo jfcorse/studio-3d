@@ -3440,10 +3440,11 @@ function drawBackground(g,opts){
     const w=it.w,d=it.d;
     if(it.id==='fan'){ce('circle',{r:w/2,fill:'none',stroke:'#777','stroke-width':0.008,'stroke-dasharray':'0.04 0.03'},gg);return;}
     const ceil=it.id==='bed'&&false;
-    ce('rect',{x:-w/2,y:-d/2,width:w,height:d,fill:'#e7e9ea',stroke:'#777','stroke-width':0.008,opacity:0.95},gg);
+    const fp=it.wallSnap?[-w/2,w/2,0,d]:footprint(it),fw=fp[1]-fp[0],fd=fp[3]-fp[2],fcz=(fp[2]+fp[3])/2;   // meubles collés au mur (lit, table) : origine sur le mur
+    ce('rect',{x:fp[0],y:fp[2],width:fw,height:fd,fill:'#e7e9ea',stroke:'#777','stroke-width':0.008,opacity:0.95},gg);
     const lab=(it.name||'').replace(/ \(.*\)/,'').replace('Grande armoire rustique','Armoire').replace('Table murale rabattable','Table').replace('Lit élévateur','Lit');
-    const small=Math.min(w,d)<0.16;
-    const tx=ce('text',{'font-size':0.06,fill:'#666','text-anchor':'middle',y:0.02,transform:(d>w*1.5&&!small)?'rotate(90)':''},gg,lab);
+    const small=Math.min(fw,fd)<0.16;
+    const tx=ce('text',{'font-size':0.06,fill:'#666','text-anchor':'middle',y:fcz+0.02,transform:(fd>fw*1.5&&!small)?`rotate(90 0 ${fcz})`:''},gg,lab);
     tx.setAttribute('pointer-events','none');
   });
 }
