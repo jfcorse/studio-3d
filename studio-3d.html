@@ -3350,7 +3350,7 @@ const css=document.createElement('style');css.textContent=`
   #elecOv .eb{display:block}
   #elecOv .sheet{display:block;color:#000;font-size:11px}
   #elecOv .sheet h1{font-size:18px;margin:0 0 2mm}
-  #elecOv .sheet svg{width:100%;height:150mm;display:block;border:1px solid #000}
+  #elecOv .sheet svg{width:100%;height:162mm;display:block;border:1px solid #000}
   #elecOv .sheet table{border-collapse:collapse;margin-top:3mm;width:100%}
   #elecOv .sheet td,#elecOv .sheet th{border:1px solid #666;padding:1.5px 5px;text-align:left}
   #elecOv .sheet .cols{display:grid;grid-template-columns:1fr 1fr;gap:6mm}
@@ -3695,24 +3695,6 @@ function buildSheet(){
   const cl=gMain.cloneNode(true);cl.querySelectorAll('[data-p]').forEach(n=>n.removeAttribute('style'));
   cl.querySelectorAll('circle[stroke-dasharray],path[stroke-dasharray=".05 .03"]').forEach(n=>{if(n.getAttribute('fill')==='#2f6f7322')n.remove();});
   s2.appendChild(cl);
-  const cols=he('div',{class:'cols'},sheet);
-  const left=he('div',{},cols);
-  const t2=he('table',{},left);
-  const h2=he('tr',{},t2);['Symbole','Désignation','Qté'].forEach(x=>he('th',{},h2,x));
-  Object.keys(ELEC_TYPES).forEach(k=>{
-    const ps=elec.pts.filter(p=>p.t===k);if(!ps.length)return;
-    const r=he('tr',{},t2);const td=he('td',{style:'width:34px'},r);
-    const sv=document.createElementNS(NS,'svg');sv.setAttribute('viewBox','-.2 -.2 .4 .4');sv.setAttribute('style','width:20px;height:20px;border:0;display:inline-block');td.appendChild(sv);symbol(k,ce('g',{},sv),'#000');
-    he('td',{},r,ELEC_TYPES[k].n);he('td',{},r,String(ps.length));
-  });
-  const eqs=elec.pts.filter(p=>p.t==='equip');
-  [...new Set(eqs.map(p=>p.n||'Équipement'))].forEach(nm=>{
-    const ps=eqs.filter(p=>(p.n||'Équipement')===nm);
-    const r=he('tr',{},t2);const td=he('td',{style:'width:34px'},r);
-    const sv=document.createElementNS(NS,'svg');sv.setAttribute('viewBox','-.2 -.2 .4 .4');sv.setAttribute('style','width:20px;height:20px;border:0;display:inline-block');td.appendChild(sv);
-    ce('rect',{x:-.15,y:-.1,width:.3,height:.2,fill:'none',stroke:'#000','stroke-width':.03},sv);
-    he('td',{},r,nm);he('td',{},r,String(ps.length));
-  });
   he('p',{},sheet,'Plan d’implantation indicatif, à faire valider par un électricien (NF C 15-100).');
 }
 
